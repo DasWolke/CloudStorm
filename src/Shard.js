@@ -19,10 +19,9 @@ class Shard extends EventEmitter {
         this.connector.on('error', (err) => {
             this.client.emit('error', err);
         });
-        +
-            this.connector.on('ready', () => {
-                this.emit('ready');
-            });
+        this.connector.on('ready', () => {
+            this.emit('ready');
+        });
     }
 
     connect() {
