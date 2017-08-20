@@ -1,6 +1,6 @@
 'use strict';
-let CloudStorm = require('../index').Client;
-let token = require('./config.json').token;
+let CloudStorm = require('../../index').Client;
+let token = require('../config.json').token;
 let bot = new CloudStorm(token);
 let amqp = require('amqplib');
 let startup = async () => {
@@ -13,14 +13,14 @@ let startup = async () => {
             console.log(event);
         }
         channel.sendToQueue('test', Buffer.from(JSON.stringify(event)));
+        // Event was sent to amqp queue, now you can use it somewhere else
     });
     bot.on('ready', () => {
-        console.log('bot is ready owo');
+        console.log('Bot received ready event');
     });
 };
-startup().then(() => {
-    console.log('fulfilled');
-}).catch(e => {
-    console.log(e);
+startup().catch(e => {
+    console.error('Error on startup!');
+    console.error(e);
 });
 
