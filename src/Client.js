@@ -1,4 +1,5 @@
 'use strict';
+let version = require('../package.json').version;
 let EventEmitter;
 try {
     EventEmitter = require('eventemitter3');
@@ -12,10 +13,13 @@ try {
 } catch (e) {
 
 }
-const axios = require('axios');
-const httpClient = axios.create({baseURL: 'https://discordapp.com/api/v6'});
-const ShardManager = require('./ShardManager');
 const Constants = require('./Constants');
+const axios = require('axios');
+const httpClient = axios.create({
+    baseURL: `https://discordapp.com/api/v${Constants.API_VERSION}`,
+    headers: {'User-Agent': `DiscordBot (https://github.com/DasWolke/CloudStorm, ${version})`}
+});
+const ShardManager = require('./ShardManager');
 
 class Client extends EventEmitter {
     constructor(token, options = {}) {
@@ -36,13 +40,12 @@ class Client extends EventEmitter {
         this.httpToken = this.token.startsWith('Bot ') ? this.token : `Bot ${this.token}`;
         Object.assign(this.options, options);
         this.options.token = token;
-        this.shardManager = null;
+        this.shardManager = new ShardManager(this);
     }
 
     async connect() {
         let gatewayUrl = await this.getGateway();
         this.options.endpoint = `${gatewayUrl}?v=${Constants.GATEWAY_VERSION}&encoding=${Erlpack ? 'etf' : 'json'}`;
-        this.shardManager = new ShardManager(this);
         this.shardManager.spawn();
     }
 
@@ -53,6 +56,14 @@ class Client extends EventEmitter {
             method: 'get'
         });
         return gatewayRequest.data.url;
+    }
+
+    async disconnect() {
+
+    }
+
+    statusUpdate(data) {
+        this.shardManager.statusUpdate(data);
     }
 }
 

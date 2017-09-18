@@ -21,10 +21,16 @@ class DiscordConnector extends EventEmitter {
         this.seq = 0;
         this.status = 'init';
         this.sessionId = null;
+        this.forceIdentify = false;
     }
 
     connect() {
-        this.betterWs = new BetterWs(this.options.endpoint);
+        if (!this.betterWs) {
+            this.betterWs = new BetterWs(this.options.endpoint);
+        } else {
+            this.betterWs.removeAllListeners();
+            this.betterWs.recreateWs(this.options.endpoint);
+        }
         this.betterWs.on('ws_open', () => {
             this.status = 'connecting';
         });
@@ -34,9 +40,14 @@ class DiscordConnector extends EventEmitter {
         this.betterWs.on('ws_close', (code, reason) => {
             this.handleWsClose(code, reason);
         });
+        this.betterWs.on('debug', event => {
+            this.client.emit('debug', event);
+        });
+        this.betterWs.on('debug_send', data => this.client.emit('debug_send', data));
     }
 
     messageAction(message) {
+        this.client.emit('debug_receive', message);
         switch (message.op) {
             case OP.DISPATCH:
                 if (message.s) {
@@ -62,11 +73,10 @@ class DiscordConnector extends EventEmitter {
                 if (message.d && this.sessionId) {
                     this.resume();
                 } else {
-                    this.identify();
+                    this.identify(true);
                 }
                 break;
             default:
-                console.log(message);
                 this.emit('event', message);
         }
     }
@@ -79,7 +89,7 @@ class DiscordConnector extends EventEmitter {
     }
 
     identify(force) {
-        if (this.sessionId && !force) {
+        if (this.sessionId && !this.forceIdentify && !force) {
             return this.resume();
         }
         let data = {
@@ -97,6 +107,7 @@ class DiscordConnector extends EventEmitter {
             }
         };
         this.betterWs.sendMessage(data);
+        this.forceIdentify = false;
     }
 
     resume() {
@@ -129,21 +140,26 @@ class DiscordConnector extends EventEmitter {
     }
 
     handleWsClose(code, reason) {
-        console.log(code, reason);
+        let forceIdentify = false;
+        this.status = 'disconnected';
         if (code === 4004) {
             this.emit('error', 'Tried to connect with an invalid token');
+            return;
+        }
+        if (code === 4010) {
+            this.emit('error', 'Invalid sharding data, check your client options');
             return;
         }
         if (code === 4011) {
             this.emit('error', 'Shard would be on over 2500 guilds. Add more shards');
             return;
         }
-        this.status = 'disconnected';
-        clearInterval(this.heartbeatInterval);
-        if (this.reconnect) {
-            this.status = 'connecting';
-            this.betterWs.recreateWs(this.options.endpoint);
+        if (code === 4009) {
+            forceIdentify = true;
         }
+        clearInterval(this.heartbeatInterval);
+        this.betterWs.removeAllListeners();
+        this.emit('disconnect', code, reason, forceIdentify);
     }
 
     statusUpdate(data = {}) {
@@ -152,11 +168,12 @@ class DiscordConnector extends EventEmitter {
 
     checkPresenceData(data) {
         data.status = data.status || 'online';
-        data.game = data.game || {type: 0, name: 'owo'};
-        if (!data.game.type) {
+        data.game = data.game || null;
+        if (data.game && !data.game.type) {
             data.game.type = data.game.url ? 1 : 0;
         }
         data.afk = data.afk || false;
+        data.since = data.since || false;
         return data;
     }
 }

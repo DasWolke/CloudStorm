@@ -43,7 +43,6 @@ class BetterWs extends EventEmitter {
     }
 
     onMessage(message) {
-
         try {
             if (Erlpack) {
                 message = Erlpack.unpack(message);
@@ -51,28 +50,29 @@ class BetterWs extends EventEmitter {
                 message = JSON.parse(message);
             }
         } catch (e) {
-            console.error(`Message: ${message} was not parseable`);
+            this.emit('debug', `Message: ${message} was not parseable`);
             return;
         }
         this.emit('ws_message', message);
     }
 
     onClose(code, reason) {
-        console.log('ws close');
         this.emit('ws_close', code, reason);
     }
 
     sendMessage(data) {
+        this.emit('debug_send', data);
         return new Promise((res, rej) => {
             try {
                 if (Erlpack) {
                     data = Erlpack.pack(data);
                 } else {
-                    data = JSON.parse(data);
+                    data = JSON.stringify(data);
                 }
             } catch (e) {
                 return rej(e);
             }
+
             this.ws.send(data, {}, (e) => {
                 if (e) {
                     return rej(e);

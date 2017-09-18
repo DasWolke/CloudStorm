@@ -14,3 +14,4 @@ module.exports.GATEWAY_OP_CODES = {
     HEARTBEAT_ACK: 11
 };
 module.exports.GATEWAY_VERSION = 6;
+module.exports.API_VERSION = 7;

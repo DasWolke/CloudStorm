@@ -12,12 +12,18 @@ class Shard extends EventEmitter {
         super();
         this.id = id;
         this.client = client;
+        this.forceIdentify = false;
+        this.ready = false;
         this.connector = new DiscordConnector(id, client);
         this.connector.on('event', (event) => {
             this.client.emit('event', event);
         });
+        this.connector.on('disconnect', (...args) => {
+            this.ready = false;
+            this.emit('disconnect', ...args);
+        });
         this.connector.on('error', (err) => {
-            this.client.emit('error', err);
+            this.emit('error', err);
         });
         this.connector.on('ready', () => {
             this.emit('ready');
@@ -25,7 +31,15 @@ class Shard extends EventEmitter {
     }
 
     connect() {
+        if (this.forceIdentify) {
+            this.connector.forceIdentify = true;
+            this.forceIdentify = false;
+        }
         return this.connector.connect();
+    }
+
+    statusUpdate(data) {
+        this.connector.statusUpdate(data);
     }
 
 }
