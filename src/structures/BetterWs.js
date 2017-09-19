@@ -11,12 +11,13 @@ try {
 } catch (e) {// eslint-disable-next-line no-empty
 }
 let WebSocket = require('ws');
-
+let RateLimitBucket = require('./RatelimitBucket');
 class BetterWs extends EventEmitter {
     constructor(adress, protocols, options) {
         super();
         this.ws = new WebSocket(adress, protocols, options);
         this.bindWs(this.ws);
+        this.wsBucket = new RateLimitBucket(120, 60000);
     }
 
     get rawWs() {
@@ -35,6 +36,8 @@ class BetterWs extends EventEmitter {
         this.ws.removeAllListeners();
         this.ws = new WebSocket(adress);
         this.options = options;
+        this.wsBucket.dropQueue();
+        this.wsBucket = new RateLimitBucket(120, 60000);
         this.bindWs(this.ws);
     }
 
@@ -72,12 +75,13 @@ class BetterWs extends EventEmitter {
             } catch (e) {
                 return rej(e);
             }
-
-            this.ws.send(data, {}, (e) => {
-                if (e) {
-                    return rej(e);
-                }
-                res();
+            this.wsBucket.queue(() => {
+                this.ws.send(data, {}, (e) => {
+                    if (e) {
+                        return rej(e);
+                    }
+                    res();
+                });
             });
         });
     }

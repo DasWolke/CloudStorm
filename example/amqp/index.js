@@ -31,15 +31,19 @@ let startup = async () => {
     });
     bot.on('ready', () => {
         console.log('Bot is ready');
+        // bot.shardManager.shards[0].connector.betterWs.sendMessage({
+        //     op: 8,
+        //     d: {guild_id: '206530953391243275', query: '', limit: 0}
+        // });
     });
-    // bot.on('debug', (log) => {
-    //     console.log('Debug:', log);
-    // });
+    bot.on('debug', (log) => {
+        console.log('Debug:', log);
+    });
     // bot.on('debug_receive', (log) => {
     //     console.log('Ws Receive Debug:', util.inspect(log, {depth:4}));
     // });
     // bot.on('debug_send', (log) => {
-    //     console.log('Ws Debug:', util.inspect(log, {depth:4}));
+    //     console.log('Ws Debug:', util.inspect(log, {depth: 4}));
     // });
 };
 startup().catch(e => {
