@@ -16,7 +16,7 @@ let amqp = require('amqplib');
 let startup = async () => {
     let connection = await amqp.connect('amqp://localhost');
     let channel = await connection.createChannel();
-    channel.assertQueue('test', {durable: false, autoDelete: true});
+    channel.assertQueue('test-pre-cache', {durable: false, autoDelete: true});
     await bot.connect();
     bot.on('event', (event) => {
         if (event.t !== 'PRESENCE_UPDATE') {
@@ -26,7 +26,7 @@ let startup = async () => {
                 // console.log(event);
             }
         }
-        channel.sendToQueue('test', Buffer.from(JSON.stringify(event)));
+        channel.sendToQueue('test-pre-cache', Buffer.from(JSON.stringify(event)));
         // Event was sent to amqp queue, now you can use it somewhere else
     });
     bot.on('ready', () => {
