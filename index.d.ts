@@ -3,6 +3,12 @@ declare module "Cloudstorm" {
     import * as WebSocket from "ws";
     import { IClientOptions as IWSOptions } from "ws";
 
+    export interface IWSMessage {
+        op: number;
+        d?: { [key: string]: any };
+        s?: number;
+    }
+
     export interface IPresenceGame {
         name: string;
         type?: number;
