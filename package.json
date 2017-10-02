@@ -16,6 +16,7 @@
     "eslint": "^4.4.1"
   },
   "optionalDependencies": {
+    "@types/ws": "^3.0.2",
     "erlpack": "^0.1.2"
   }
 }
