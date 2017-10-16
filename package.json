@@ -16,6 +16,7 @@
     "eslint": "^4.4.1"
   },
   "optionalDependencies": {
+    "amqp": "^0.2.6",
     "erlpack": "^0.1.2"
   }
 }
