@@ -17,6 +17,8 @@
   },
   "optionalDependencies": {
     "amqp": "^0.2.6",
+    "@types/node": "^8.0.31",
+    "@types/ws": "^3.0.2",
     "erlpack": "^0.1.2"
   }
 }
