@@ -100,7 +100,7 @@ class DiscordConnector extends EventEmitter {
                     browser: 'CloudStorm',
                     device: 'CloudStorm'
                 },
-                compress: false,
+                compress: this.options.compress,
                 large_threshold: 250,
                 shard: [this.id, this.options.shardAmount],
                 presence: this.checkPresenceData(this.options.initialPresence)

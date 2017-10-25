@@ -2,7 +2,7 @@
 let CloudStorm = require('../../index').Client;
 let token = require('../config.json').token;
 let bot = new CloudStorm(token, {
-    initialPresence: {status: 'online', game: {name: 'test'}},
+    initialPresence: {status: 'online', game: {name: 'Wolking on Sunshine'}},
     firstShardId: 0,
     lastShardId: 0,
     shardAmount: 1
@@ -22,11 +22,7 @@ let startup = async () => {
         await bot.connect();
         bot.on('event', (event) => {
             if (event.t !== 'PRESENCE_UPDATE') {
-                if (event.t) {
-                    console.log(`Received Event ${event.t}`);
-                } else {
-                    // console.log(event);
-                }
+
             }
             connection.publish('test-pre-cache', event);
             // channel.sendToQueue('test-pre-cache', Buffer.from(JSON.stringify(event)));
@@ -43,9 +39,9 @@ let startup = async () => {
         //     d: {guild_id: '206530953391243275', query: '', limit: 0}
         // });
     });
-    bot.on('debug', (log) => {
-        console.log('Debug:', log);
-    });
+    // bot.on('debug', (log) => {
+    //     console.log('Debug:', log);
+    // });
     // bot.on('debug_receive', (log) => {
     //     console.log('Ws Receive Debug:', util.inspect(log, {depth:4}));
     // });
