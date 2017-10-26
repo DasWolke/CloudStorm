@@ -5,6 +5,7 @@ try {
 } catch (e) {
     EventEmitter = require('events').EventEmitter;
 }
+const zlib = require('zlib');
 let Erlpack;
 try {
     Erlpack = require('erlpack');
@@ -50,6 +51,9 @@ class BetterWs extends EventEmitter {
             if (Erlpack) {
                 message = Erlpack.unpack(message);
             } else {
+                if (typeof message !== 'string') {
+                    message = zlib.inflateSync(message);
+                }
                 message = JSON.parse(message);
             }
         } catch (e) {

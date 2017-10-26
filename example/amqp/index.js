@@ -2,7 +2,7 @@
 let CloudStorm = require('../../index').Client;
 let token = require('../config.json').token;
 let bot = new CloudStorm(token, {
-    initialPresence: {status: 'online', game: {name: 'test'}},
+    initialPresence: {status: 'online', game: {name: 'Wolking on Sunshine'}},
     firstShardId: 0,
     lastShardId: 0,
     shardAmount: 1
@@ -11,24 +11,27 @@ let bot = new CloudStorm(token, {
 // blocked(ms => {
 //     console.log(`Blocked for ${ms}ms`);
 // }, {threshold: 20});
-let amqp = require('amqplib');
+let amqp = require('amqp');
 // const util = require('util');
 let startup = async () => {
-    let connection = await amqp.connect('amqp://localhost');
-    let channel = await connection.createChannel();
-    channel.assertQueue('test-pre-cache', {durable: false, autoDelete: true});
-    await bot.connect();
-    bot.on('event', (event) => {
-        if (event.t !== 'PRESENCE_UPDATE') {
-            if (event.t) {
-                console.log(`Received Event ${event.t}`);
-            } else {
-                // console.log(event);
-            }
-        }
-        channel.sendToQueue('test-pre-cache', Buffer.from(JSON.stringify(event)));
-        // Event was sent to amqp queue, now you can use it somewhere else
+    let connection = amqp.createConnection({host: 'localhost'});
+    connection.on('error', (e) => {
+        console.error(e);
     });
+    connection.on('ready', async () => {
+        await bot.connect();
+        bot.on('event', (event) => {
+            if (event.t !== 'PRESENCE_UPDATE') {
+
+            }
+            connection.publish('test-pre-cache', event);
+            // channel.sendToQueue('test-pre-cache', Buffer.from(JSON.stringify(event)));
+            // Event was sent to amqp queue, now you can use it somewhere else
+        });
+    });
+    // let connection = await amqp.connect('amqp://localhost');
+    // let channel = await connection.createChannel();
+    // channel.assertQueue('test-pre-cache', {durable: false, autoDelete: true});
     bot.on('ready', () => {
         console.log('Bot is ready');
         // bot.shardManager.shards[0].connector.betterWs.sendMessage({
@@ -36,9 +39,9 @@ let startup = async () => {
         //     d: {guild_id: '206530953391243275', query: '', limit: 0}
         // });
     });
-    bot.on('debug', (log) => {
-        console.log('Debug:', log);
-    });
+    // bot.on('debug', (log) => {
+    //     console.log('Debug:', log);
+    // });
     // bot.on('debug_receive', (log) => {
     //     console.log('Ws Receive Debug:', util.inspect(log, {depth:4}));
     // });

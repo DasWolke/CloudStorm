@@ -9,6 +9,7 @@
   "author": "DasWolke <wolke@weeb.sh>",
   "license": "MIT",
   "dependencies": {
+    "amqp": "^0.2.6",
     "axios": "^0.16.2",
     "ws": "^3.1.0"
   },

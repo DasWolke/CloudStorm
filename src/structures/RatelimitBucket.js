@@ -10,7 +10,6 @@ class RatelimitBucket {
     }
 
     queue(fn) {
-        console.log(`Remaining: ${this.remaining} Limit: ${this.limit}`);
         return new Promise((res, rej) => {
             let wrapFn = () => {
                 this.remaining--;
@@ -38,7 +37,7 @@ class RatelimitBucket {
 
     checkQueue() {
         if (this.fnQueue.length > 0 && this.remaining !== 0) {
-            let queuedFunc = this.fnQueue.splice(0, 1);
+            let queuedFunc = this.fnQueue.splice(0, 1)[0];
             queuedFunc.callback();
         }
     }
@@ -46,8 +45,6 @@ class RatelimitBucket {
     resetRemaining() {
         this.remaining = this.limit;
         clearTimeout(this.resetTimeout);
-        this.resetTimeout = null;
-        console.log(`Reset Limit: Remaining: ${this.remaining} Limit: ${this.limit}`);
         this.checkQueue();
     }
 
