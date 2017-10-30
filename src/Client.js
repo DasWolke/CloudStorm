@@ -28,7 +28,6 @@ class Client extends EventEmitter {
             throw new Error('Missing token!');
         }
         this.options = {
-            compress: true,
             large_guild_threshold: 250,
             firstShardId: 0,
             lastShardId: 0,
@@ -45,7 +44,7 @@ class Client extends EventEmitter {
 
     async connect() {
         let gatewayUrl = await this.getGateway();
-        this.options.endpoint = `${gatewayUrl}?v=${Constants.GATEWAY_VERSION}&encoding=${Erlpack ? 'etf' : 'json'}`;
+        this.options.endpoint = `${gatewayUrl}?v=${Constants.GATEWAY_VERSION}&encoding=${Erlpack ? 'etf' : 'json'}&compress=zlib-stream`;
         this.shardManager.spawn();
     }
 

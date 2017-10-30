@@ -5,7 +5,7 @@ try {
 } catch (e) {
     EventEmitter = require('events').EventEmitter;
 }
-const zlib = require('zlib');
+const zlib = require('zlib-sync');
 let Erlpack;
 try {
     Erlpack = require('erlpack');
@@ -13,12 +13,17 @@ try {
 }
 let WebSocket = require('ws');
 let RateLimitBucket = require('./RatelimitBucket');
+
 class BetterWs extends EventEmitter {
     constructor(adress, protocols, options) {
         super();
         this.ws = new WebSocket(adress, protocols, options);
         this.bindWs(this.ws);
         this.wsBucket = new RateLimitBucket(120, 60000);
+        this.zlibInflate = new zlib.Inflate({
+            chunkSize: 65535,
+            flush: zlib.Z_SYNC_FLUSH,
+        });
     }
 
     get rawWs() {
@@ -48,13 +53,18 @@ class BetterWs extends EventEmitter {
 
     onMessage(message) {
         try {
+            const length = message.length;
+            const flush = length >= 4 &&
+                message[length - 4] === 0x00 &&
+                message[length - 3] === 0x00 &&
+                message[length - 2] === 0xFF &&
+                message[length - 1] === 0xFF;
+            this.zlibInflate.push(message, flush && zlib.Z_SYNC_FLUSH);
+            if (!flush) return;
             if (Erlpack) {
-                message = Erlpack.unpack(message);
+                message = Erlpack.unpack(this.zlibInflate.result);
             } else {
-                if (typeof message !== 'string') {
-                    message = zlib.inflateSync(message);
-                }
-                message = JSON.parse(message);
+                message = JSON.parse(this.zlibInflate.result);
             }
         } catch (e) {
             this.emit('debug', `Message: ${message} was not parseable`);
