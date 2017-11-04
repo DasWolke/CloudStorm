@@ -11,46 +11,93 @@ try {
     Erlpack = require('erlpack');
 } catch (e) {// eslint-disable-next-line no-empty
 }
+const GATEWAY_OP_CODES = require('../Constants').GATEWAY_OP_CODES;
 let WebSocket = require('ws');
-let RateLimitBucket = require('./RatelimitBucket');
+let RatelimitBucket = require('./RatelimitBucket');
 
+/**
+ * Helper Class for simplifying the websocket connection to discord
+ * @property {WebSocket} ws - the raw websocket connection
+ * @property {RatelimitBucket} wsBucket - ratelimit bucket for the general websocket connection
+ * @property {RatelimitBucket} statusBucket - ratelimit bucket for the 5/60s status update ratelimit
+ * @property {zlib} zlibInflate - shared zlibInflate context for inflating zlib compressed messages received from discord
+ * @private
+ */
 class BetterWs extends EventEmitter {
-    constructor(adress, protocols, options) {
+    constructor(address, options = {}) {
         super();
-        this.ws = new WebSocket(adress, protocols, options);
+        this.ws = new WebSocket(address, options);
         this.bindWs(this.ws);
-        this.wsBucket = new RateLimitBucket(120, 60000);
+        this.wsBucket = new RatelimitBucket(120, 60000);
+        this.statusBucket = new RatelimitBucket(5, 60000);
         this.zlibInflate = new zlib.Inflate({
             chunkSize: 65535,
             flush: zlib.Z_SYNC_FLUSH,
         });
     }
 
+    /**
+     * Get the raw websocket connection currently used
+     * @returns {WebSocket}
+     */
     get rawWs() {
         return this.ws;
     }
 
+    /**
+     * Add eventlisteners to a passed websocket connection
+     * @param {WebSocket} ws - websocket
+     */
     bindWs(ws) {
         ws.on('message', (msg) => {
             this.onMessage(msg);
         });
         ws.on('close', (code, reason) => this.onClose(code, reason));
+        ws.on('error', (err) => {
+            /**
+             * @event BetterWs#error
+             * @type {Error}
+             * Emitted upon errors from the underlying websocket
+             * @private
+             */
+            this.emit(err);
+        });
         ws.on('open', () => this.onOpen());
     }
 
-    recreateWs(adress, options = {}) {
+    /**
+     * Create a new Websocket Connection if the old one was closed/destroyed
+     * @param {String} address - address to connect to
+     * @param {Object} options - options used by the websocket connection
+     */
+    recreateWs(address, options = {}) {
         this.ws.removeAllListeners();
-        this.ws = new WebSocket(adress);
+        this.ws = new WebSocket(address, options);
         this.options = options;
         this.wsBucket.dropQueue();
-        this.wsBucket = new RateLimitBucket(120, 60000);
+        this.wsBucket = new RatelimitBucket(120, 60000);
+        this.statusBucket = new RatelimitBucket(5, 60000);
         this.bindWs(this.ws);
     }
 
+    /**
+     * Called upon opening of the websocket connection
+     */
     onOpen() {
+        /**
+         * @event BetterWs#ws_open
+         * @type {void}
+         * Emitted once the underlying websocket connection has opened
+         * @private
+         */
         this.emit('ws_open');
     }
 
+    /**
+     * Called once a websocket message is received,
+     * uncompresses the message using zlib and parses it via Erlpack or JSON.parse
+     * @param {Object|Buffer|String} message - message received by websocket
+     */
     onMessage(message) {
         try {
             const length = message.length;
@@ -67,19 +114,53 @@ class BetterWs extends EventEmitter {
                 message = JSON.parse(this.zlibInflate.result);
             }
         } catch (e) {
-            this.emit('debug', `Message: ${message} was not parseable`);
+            /**
+             * @event BetterWs#error
+             * @type {String} - Emitted upon parse errors of messages
+             * @private
+             */
+            this.emit('error', `Message: ${message} was not parseable`);
             return;
         }
+        /**
+         * @event BetterWs#ws_message
+         * @type {Object} - Emitted upon successful parsing of a message with the parsed Message
+         * @private
+         */
         this.emit('ws_message', message);
     }
 
+    /**
+     * Called when the websocket connection closes for some reason
+     * @param {Number} code - websocket close code
+     * @param {String} reason - reason of the close if any
+     */
     onClose(code, reason) {
+        /**
+         * @event BetterWs#ws_close
+         * @type {void}
+         * @param {Number} code - websocket close code
+         * @param {String} reason - websocketr close reason
+         * @private
+         */
         this.emit('ws_close', code, reason);
     }
 
+    /**
+     * Send a message to the discord gateway
+     * @param {Object} data - data to send
+     * @returns {Promise.<void>}
+     */
     sendMessage(data) {
+        /**
+         * @event BetterWs#debug_send
+         * @type {object}
+         * Used for debugging the messages sent to discord's gateway
+         * @private
+         */
         this.emit('debug_send', data);
         return new Promise((res, rej) => {
+            let status = data.op === GATEWAY_OP_CODES.STATUS_UPDATE;
             try {
                 if (Erlpack) {
                     data = Erlpack.pack(data);
@@ -89,17 +170,32 @@ class BetterWs extends EventEmitter {
             } catch (e) {
                 return rej(e);
             }
-            this.wsBucket.queue(() => {
-                this.ws.send(data, {}, (e) => {
-                    if (e) {
-                        return rej(e);
-                    }
-                    res();
+            let sendMsg = () => {
+                // The promise from wsBucket is ignored, since the method passed to it does not return a promise
+                this.wsBucket.queue(() => {
+                    this.ws.send(data, {}, (e) => {
+                        if (e) {
+                            return rej(e);
+                        }
+                        res();
+                    });
                 });
-            });
+            };
+            if (status) {
+                // same here
+                this.statusBucket.queue(sendMsg);
+            } else {
+                sendMsg();
+            }
         });
     }
 
+    /**
+     * Close the current connection
+     * @param {Number} code=1000 - websocket close code to use
+     * @param {String} reason - reason of the disconnect
+     * @returns {Promise.<void>}
+     */
     close(code = 1000, reason = '') {
         return new Promise((res, rej) => {
             this.ws.close(code, reason);
@@ -110,10 +206,6 @@ class BetterWs extends EventEmitter {
                 return rej('Websocket not closed within 5 seconds');
             }, 5 * 1000);
         });
-
-    }
-
-    terminate() {
 
     }
 }

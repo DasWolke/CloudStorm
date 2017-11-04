@@ -7,7 +7,21 @@ try {
 }
 const DiscordConnector = require('./connector/DiscordConnector');
 
+/**
+ * Shard class, which provides a wrapper around the DiscordConnector with metadata like the id of the shard
+ * @property {Number} id - Id of the shard
+ * @property {Client} client - main class used for forwarding events
+ * @property {Boolean} forceIdentify - whether the connector should not try to resume and re-identify
+ * @property {Boolean} ready - if this shard has successfully connected and identified with the gateway
+ * @property {DiscordConnector} connector - connector used for connecting to discord
+ * @private
+ */
 class Shard extends EventEmitter {
+    /**
+     * Create a new Shard
+     * @param {Number} id - Id of the shard
+     * @param {Client} client - main class used for forwarding events
+     */
     constructor(id, client) {
         super();
         this.id = id;
@@ -16,30 +30,88 @@ class Shard extends EventEmitter {
         this.ready = false;
         this.connector = new DiscordConnector(id, client);
         this.connector.on('event', (event) => {
+            event.d.shard_id = this.id;
+            /**
+             * @event Client#event
+             * @type {Object}
+             * Emitted when an event is received from discord
+             */
             this.client.emit('event', event);
         });
         this.connector.on('disconnect', (...args) => {
             this.ready = false;
+            /**
+             * @event Shard#disconnect
+             * @type {void}
+             * Emitted when the shard get's disconnected from the gateway
+             * @private
+             */
             this.emit('disconnect', ...args);
         });
         this.connector.on('error', (err) => {
+            /**
+             * @event Shard#error
+             * @type {Error}
+             * Emitted when the shard (or internal components of it) error
+             * @private
+             */
             this.emit('error', err);
         });
         this.connector.on('ready', () => {
+            /**
+             * @event Shard#ready
+             * @type {void}
+             * Emitted when the shard turns ready
+             * @private
+             */
             this.emit('ready');
         });
     }
 
+    /**
+     * Create a new Connection to discord
+     */
     connect() {
         if (this.forceIdentify) {
             this.connector.forceIdentify = true;
             this.forceIdentify = false;
         }
-        return this.connector.connect();
+        this.connector.connect();
     }
 
+    /**
+     * Close the current connection
+     * @returns {Promise.<void>}
+     */
+    disconnect() {
+        return this.connector.disconnect();
+    }
+
+    /**
+     * Send a status update payload to discord
+     * @param {Presence} data - data to send
+     * @returns {Promise.<void>}
+     */
     statusUpdate(data) {
-        this.connector.statusUpdate(data);
+        return this.connector.statusUpdate(data);
+    }
+
+    /**
+     * Send a voice state update payload to discord
+     * @param {VoiceStateUpdate} data - data to send
+     * @returns {Promise.<void>}
+     */
+    voiceStateUpdate(data) {
+        return this.connector.voiceStateUpdate(data);
+    }
+
+    /**
+     * Send a request guild members payload to discord
+     * @param {RequestGuildMembers} data - data to send
+     * @returns {Promise.<void>}
+     */
+    requestGuildMembers(data) {
+        return this.connector.requestGuildMembers(data);
     }
 
 }

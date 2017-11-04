@@ -8,7 +8,27 @@ try {
 const BetterWs = require('../structures/BetterWs');
 const OP = require('../Constants').GATEWAY_OP_CODES;
 
+/**
+ * Class used for acting based on received events
+ * @property {String} id - id of the shard that created this class
+ * @property {Client} client - Main client instance
+ * @property {Object} options - options passed from the main client instance
+ * @property {Boolean} reconnect - whether autoreconnect is enabled
+ * @property {BetterWs} betterWs - Websocket class used for connecting to discord
+ * @property {Object} heartbeatInterval - interval within which heartbeats should be sent to discord
+ * @property {String[]} _trace - trace of servers used when connecting to discord
+ * @property {Number} seq - sequence value used on RESUMES and heartbeats
+ * @property {String} status - status of this connector
+ * @property {String} sessionId - session id of the current session, used in RESUMES
+ * @property {Boolean} forceIdentify - whether the connector should just IDENTIFY again and don't try to resume
+ * @private
+ */
 class DiscordConnector extends EventEmitter {
+    /**
+     * Create a new Discord Connector
+     * @param {String} id - id of the shard that created this class
+     * @param {Client} client - Main client instance
+     */
     constructor(id, client) {
         super();
         this.id = id;
@@ -24,6 +44,9 @@ class DiscordConnector extends EventEmitter {
         this.forceIdentify = false;
     }
 
+    /**
+     * Connect to discord
+     */
     connect() {
         if (!this.betterWs) {
             this.betterWs = new BetterWs(this.options.endpoint);
@@ -41,12 +64,44 @@ class DiscordConnector extends EventEmitter {
             this.handleWsClose(code, reason);
         });
         this.betterWs.on('debug', event => {
+            /**
+             * @event Client#debug
+             * @type {Object}
+             * Debug event used for debugging the library
+             * @private
+             */
             this.client.emit('debug', event);
         });
-        this.betterWs.on('debug_send', data => this.client.emit('debug_send', data));
+        this.betterWs.on('debug_send', data => {
+            /**
+             * @event Client#debug_send
+             * @type {Object}
+             * Forwarded event from the connector used for debugging what CloudStorm sends to discord
+             * @private
+             */
+            this.client.emit('debug_send', data);
+        });
     }
 
+    /**
+     * Close the websocket connection and disconnect
+     * @returns {Promise.<void>}
+     */
+    disconnect() {
+        return this.betterWs.close();
+    }
+
+    /**
+     * Called with a parsed Websocket message to execute further actions
+     * @param {Object} message - message that was received
+     */
     messageAction(message) {
+        /**
+         * @event Client#debug_receive
+         * @type {Object}
+         * Debug the parsed Websocket messages received from discord
+         * @private
+         */
         this.client.emit('debug_receive', message);
         switch (message.op) {
             case OP.DISPATCH:
@@ -77,10 +132,19 @@ class DiscordConnector extends EventEmitter {
                 }
                 break;
             default:
+                /**
+                 * @event DiscordConnector#event
+                 * @type {Object}
+                 * Forward the event
+                 * @private
+                 */
                 this.emit('event', message);
         }
     }
 
+    /**
+     * Reset this connector
+     */
     reset() {
         this.sessionId = null;
         this.seq = 0;
@@ -88,6 +152,11 @@ class DiscordConnector extends EventEmitter {
         this.heartbeatInterval = null;
     }
 
+    /**
+     * Send a identify payload to the gateway
+     * @param {Boolean} force - Whether CloudStorm should send an IDENTIFY even if there's a session that could be resumed
+     * @returns {Promise.<void>}
+     */
     identify(force) {
         if (this.sessionId && !this.forceIdentify && !force) {
             return this.resume();
@@ -100,73 +169,165 @@ class DiscordConnector extends EventEmitter {
                     browser: 'CloudStorm',
                     device: 'CloudStorm'
                 },
-                compress: this.options.compress,
-                large_threshold: 250,
+                large_threshold: this.options.large_guild_threshold,
                 shard: [this.id, this.options.shardAmount],
-                presence: this.checkPresenceData(this.options.initialPresence)
+                presence: this.options.initialPresence ? this._checkPresenceData(this.options.initialPresence) : null
             }
         };
-        this.betterWs.sendMessage(data);
         this.forceIdentify = false;
+        return this.betterWs.sendMessage(data);
     }
 
+    /**
+     * Send a resume payload to the gateway
+     * @returns {Promise.<void>}
+     */
     resume() {
-        this.betterWs.sendMessage({
+        return this.betterWs.sendMessage({
             op: OP.RESUME,
             d: {seq: this.seq, token: this.options.token, session_id: this.sessionId}
         });
     }
 
+    /**
+     * Send a heartbeat to discord
+     */
     heartbeat() {
         this.betterWs.sendMessage({op: OP.HEARTBEAT, d: this.seq});
     }
 
+    /**
+     * Handle dispatch events
+     * @param {Object} message - message received from the websocket
+     */
     handleDispatch(message) {
         switch (message.t) {
             case 'READY':
-                this.sessionId = message.d.session_id;
-                this.status = 'ready';
-                this.emit('ready');
-                this.emit('event', message);
-                break;
             case 'RESUME':
+                if (message.t === 'READY') {
+                    this.sessionId = message.d.session_id;
+                }
                 this.status = 'ready';
+                /**
+                 * @event DiscordConnector#ready
+                 * @type {void}
+                 * Emitted once the connector is ready (again)
+                 * @private
+                 */
                 this.emit('ready');
+                /**
+                 * @event DiscordConnector#event
+                 * @type {Object}
+                 * Emitted once an event was received from discord
+                 * @private
+                 */
                 this.emit('event', message);
                 break;
             default:
+                /**
+                 * @event DiscordConnector#event
+                 * @type {Object}
+                 * Emitted once an event was received from discord
+                 * @private
+                 */
                 this.emit('event', message);
         }
     }
 
+    /**
+     * Handle a close from the underlying websocket
+     * @param {Number} code - websocket close code
+     * @param {String} reason - close reason if any
+     */
     handleWsClose(code, reason) {
         let forceIdentify = false;
+        let gracefulClose = false;
         this.status = 'disconnected';
         if (code === 4004) {
+            /**
+             * @event DiscordConnector#error
+             * @type {String}
+             * Emitted when the token was invalid
+             * @private
+             */
             this.emit('error', 'Tried to connect with an invalid token');
             return;
         }
         if (code === 4010) {
+            /**
+             * @event DiscordConnector#error
+             * @type {String}
+             * Emitted when the user tried to connect with bad sharding data
+             * @private
+             */
             this.emit('error', 'Invalid sharding data, check your client options');
             return;
         }
         if (code === 4011) {
+            /**
+             * @event DiscordConnector#error
+             * @type {String}
+             * Emitted when the shard would be on over 2500 guilds
+             * @private
+             */
             this.emit('error', 'Shard would be on over 2500 guilds. Add more shards');
             return;
         }
+        // force identify if the session is marked as invalid
         if (code === 4009) {
             forceIdentify = true;
         }
+        // don't try to reconnect when true
+        if (code === 1000) {
+            gracefulClose = true;
+        }
         clearInterval(this.heartbeatInterval);
         this.betterWs.removeAllListeners();
-        this.emit('disconnect', code, reason, forceIdentify);
+        /**
+         * @event DiscordConnector#disconnect
+         * @type {Object}
+         * @property {Number} code - websocket disconnect code
+         * @private
+         */
+        this.emit('disconnect', code, reason, forceIdentify, gracefulClose);
     }
 
+    /**
+     * Send a status update payload to discord
+     * @param {Presence} data - presence data to send
+     */
     statusUpdate(data = {}) {
-        this.betterWs.sendMessage({op: OP.STATUS_UPDATE, d: this.checkPresenceData(data)});
+        return this.betterWs.sendMessage({op: OP.STATUS_UPDATE, d: this._checkPresenceData(data)});
     }
 
-    checkPresenceData(data) {
+    /**
+     * Send a voice state update payload to discord
+     * @param {VoiceStateUpdate} data - voice state update data to send
+     * @returns {Promise.<void>}
+     */
+    voiceStateUpdate(data) {
+        if (!data) {
+            return Promise.resolve();
+        }
+        return this.betterWs.sendMessage({op: OP.VOICE_STATE_UPDATE, d: this._checkVoiceStateUpdateData(data)});
+    }
+
+    /**
+     * Send a request guild members payload to discord
+     * @param {RequestGuildMembers} data - data to send
+     * @returns {Promise.<void>}
+     */
+    requestGuildMembers(data = {}) {
+        return this.betterWs.sendMessage({op: OP.REQUEST_GUILD_MEMBERS, d: this._checkRequestGuildMembersData(data)});
+    }
+
+    /**
+     * Checks the presence data and fills in missing elements
+     * @param {Object} data - data to send
+     * @returns {Object} data after it's fixed/checked
+     * @private
+     */
+    _checkPresenceData(data) {
         data.status = data.status || 'online';
         data.game = data.game || null;
         if (data.game && !data.game.type) {
@@ -174,6 +335,31 @@ class DiscordConnector extends EventEmitter {
         }
         data.afk = data.afk || false;
         data.since = data.since || false;
+        return data;
+    }
+
+    /**
+     * Checks the voice state update data and fills in missing elements
+     * @param {Object} data - data to send
+     * @returns {Object} data after it's fixed/checked
+     * @private
+     */
+    _checkVoiceStateUpdateData(data) {
+        data.channel_id = data.channel_id || null;
+        data.self_mute = data.self_mute || false;
+        data.self_deaf = data.self_deaf || false;
+        return data;
+    }
+
+    /**
+     * Checks the request guild members data and fills in missing elements
+     * @param {Object} data - data to send
+     * @returns {Object} data after it's fixed/checked
+     * @private
+     */
+    _checkRequestGuildMembersData(data) {
+        data.query = data.query || '';
+        data.limit = data.limit || 0;
         return data;
     }
 }

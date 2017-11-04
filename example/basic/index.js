@@ -5,9 +5,9 @@ let bot = new CloudStorm(token);
 let startup = async () => {
     await bot.connect();
     bot.on('event', (event) => {
-        // console.log(event);
         // Do stuff with the received event ¯\_(ツ)_/¯
     });
+
     bot.on('ready', () => {
         console.log('Bot received ready event');
     });
