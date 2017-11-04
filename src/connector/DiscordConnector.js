@@ -67,7 +67,7 @@ class DiscordConnector extends EventEmitter {
             /**
              * @event Client#debug
              * @type {Object}
-             * Debug event used for debugging the library
+             * @description Debug event used for debugging the library
              * @private
              */
             this.client.emit('debug', event);
@@ -76,7 +76,7 @@ class DiscordConnector extends EventEmitter {
             /**
              * @event Client#debug_send
              * @type {Object}
-             * Forwarded event from the connector used for debugging what CloudStorm sends to discord
+             * @description Forwarded event from the connector used for debugging what CloudStorm sends to discord
              * @private
              */
             this.client.emit('debug_send', data);
@@ -99,7 +99,7 @@ class DiscordConnector extends EventEmitter {
         /**
          * @event Client#debug_receive
          * @type {Object}
-         * Debug the parsed Websocket messages received from discord
+         * @description Debug the parsed Websocket messages received from discord
          * @private
          */
         this.client.emit('debug_receive', message);
@@ -135,7 +135,7 @@ class DiscordConnector extends EventEmitter {
                 /**
                  * @event DiscordConnector#event
                  * @type {Object}
-                 * Forward the event
+                 * @description Forward the event
                  * @private
                  */
                 this.emit('event', message);
@@ -211,14 +211,14 @@ class DiscordConnector extends EventEmitter {
                 /**
                  * @event DiscordConnector#ready
                  * @type {void}
-                 * Emitted once the connector is ready (again)
+                 * @description Emitted once the connector is ready (again)
                  * @private
                  */
                 this.emit('ready');
                 /**
                  * @event DiscordConnector#event
                  * @type {Object}
-                 * Emitted once an event was received from discord
+                 * @description Emitted once an event was received from discord
                  * @private
                  */
                 this.emit('event', message);
@@ -227,7 +227,7 @@ class DiscordConnector extends EventEmitter {
                 /**
                  * @event DiscordConnector#event
                  * @type {Object}
-                 * Emitted once an event was received from discord
+                 * @description Emitted once an event was received from discord
                  * @private
                  */
                 this.emit('event', message);
@@ -247,7 +247,7 @@ class DiscordConnector extends EventEmitter {
             /**
              * @event DiscordConnector#error
              * @type {String}
-             * Emitted when the token was invalid
+             * @description Emitted when the token was invalid
              * @private
              */
             this.emit('error', 'Tried to connect with an invalid token');
@@ -257,7 +257,7 @@ class DiscordConnector extends EventEmitter {
             /**
              * @event DiscordConnector#error
              * @type {String}
-             * Emitted when the user tried to connect with bad sharding data
+             * @description Emitted when the user tried to connect with bad sharding data
              * @private
              */
             this.emit('error', 'Invalid sharding data, check your client options');
@@ -267,7 +267,7 @@ class DiscordConnector extends EventEmitter {
             /**
              * @event DiscordConnector#error
              * @type {String}
-             * Emitted when the shard would be on over 2500 guilds
+             * @description Emitted when the shard would be on over 2500 guilds
              * @private
              */
             this.emit('error', 'Shard would be on over 2500 guilds. Add more shards');

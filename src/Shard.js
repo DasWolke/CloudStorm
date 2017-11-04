@@ -34,7 +34,7 @@ class Shard extends EventEmitter {
             /**
              * @event Client#event
              * @type {Object}
-             * Emitted when an event is received from discord
+             * @description Emitted when an event is received from discord
              */
             this.client.emit('event', event);
         });
@@ -43,7 +43,7 @@ class Shard extends EventEmitter {
             /**
              * @event Shard#disconnect
              * @type {void}
-             * Emitted when the shard get's disconnected from the gateway
+             * @description Emitted when the shard get's disconnected from the gateway
              * @private
              */
             this.emit('disconnect', ...args);
@@ -52,7 +52,7 @@ class Shard extends EventEmitter {
             /**
              * @event Shard#error
              * @type {Error}
-             * Emitted when the shard (or internal components of it) error
+             * @description Emitted when the shard (or internal components of it) error
              * @private
              */
             this.emit('error', err);
@@ -61,7 +61,7 @@ class Shard extends EventEmitter {
             /**
              * @event Shard#ready
              * @type {void}
-             * Emitted when the shard turns ready
+             * @description Emitted when the shard turns ready
              * @private
              */
             this.emit('ready');

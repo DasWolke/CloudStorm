@@ -37,7 +37,7 @@ class ShardManager {
             /**
              * @event Client#debug
              * @type {String}
-             * used for debugging of the internals of the library
+             * @description used for debugging of the internals of the library
              * @private
              */
             this.client.emit('debug', `Spawned shard ${i}`);
@@ -68,7 +68,7 @@ class ShardManager {
         /**
          * @event Client#debug
          * @type {String}
-         * used for debugging of the internals of the library
+         * @description used for debugging of the internals of the library
          * @private
          */
         this.client.emit('debug', `Connecting Shard ${shard.id} Status: ${shard.connector.status} Ready: ${shard.ready}`);
@@ -87,7 +87,7 @@ class ShardManager {
         /**
          * @event Client#debug
          * @type {String}
-         * used for debugging of the internals of the library
+         * @description used for debugging of the internals of the library
          * @private
          */
         this.client.emit('debug', `Checking queue Length: ${this.connectQueue.length} LastAttempt: ${this.lastConnectionAttempt} Current Time: ${Date.now()}`);
@@ -108,7 +108,7 @@ class ShardManager {
             /**
              * @event Client#debug
              * @type {String}
-             * used for debugging of the internals of the library
+             * @description used for debugging of the internals of the library
              * @private
              */
             this.client.emit('debug', `Shard ${shard.id} is ready`);
@@ -118,11 +118,17 @@ class ShardManager {
             /**
              * @event Client#error
              * @type {Error}
-             * Emitted when an error occurs somewhere in the library
+             * @description Emitted when an error occurs somewhere in the library
              */
             this.client.emit('error', error);
         });
         shard.on('disconnect', (code, reason, forceIdentify) => {
+            /**
+             * @event Client#debug
+             * @type {String}
+             * @description used for debugging of the internals of the library
+             * @private
+             */
             this.client.emit('debug', `${shard.id} ws closed with code ${code} and reason: ${reason}`);
             if (code === 1000) {
                 this._checkDisconnect();
@@ -148,7 +154,7 @@ class ShardManager {
         /**
          * @event Client#ready
          * @type {void}
-         * Emitted when all shards turn ready
+         * @description Emitted when all shards turn ready
          */
         this.client.emit('ready');
     }
@@ -168,7 +174,7 @@ class ShardManager {
         /**
          * @event Client#disconnected
          * @type {void}
-         * Emitted when all shards have disconnected successfully
+         * @description Emitted when all shards have disconnected successfully
          */
         this.client.emit('disconnected');
     }

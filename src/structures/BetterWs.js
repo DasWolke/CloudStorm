@@ -57,7 +57,7 @@ class BetterWs extends EventEmitter {
             /**
              * @event BetterWs#error
              * @type {Error}
-             * Emitted upon errors from the underlying websocket
+             * @description Emitted upon errors from the underlying websocket
              * @private
              */
             this.emit(err);
@@ -87,7 +87,7 @@ class BetterWs extends EventEmitter {
         /**
          * @event BetterWs#ws_open
          * @type {void}
-         * Emitted once the underlying websocket connection has opened
+         * @description Emitted once the underlying websocket connection has opened
          * @private
          */
         this.emit('ws_open');
@@ -116,7 +116,8 @@ class BetterWs extends EventEmitter {
         } catch (e) {
             /**
              * @event BetterWs#error
-             * @type {String} - Emitted upon parse errors of messages
+             * @type {String}
+             * @description Emitted upon parse errors of messages
              * @private
              */
             this.emit('error', `Message: ${message} was not parseable`);
@@ -124,7 +125,8 @@ class BetterWs extends EventEmitter {
         }
         /**
          * @event BetterWs#ws_message
-         * @type {Object} - Emitted upon successful parsing of a message with the parsed Message
+         * @type {Object}
+         * @description Emitted upon successful parsing of a message with the parsed Message
          * @private
          */
         this.emit('ws_message', message);
@@ -140,7 +142,7 @@ class BetterWs extends EventEmitter {
          * @event BetterWs#ws_close
          * @type {void}
          * @param {Number} code - websocket close code
-         * @param {String} reason - websocketr close reason
+         * @param {String} reason - websocket close reason
          * @private
          */
         this.emit('ws_close', code, reason);
@@ -155,7 +157,7 @@ class BetterWs extends EventEmitter {
         /**
          * @event BetterWs#debug_send
          * @type {object}
-         * Used for debugging the messages sent to discord's gateway
+         * @description Used for debugging the messages sent to discord's gateway
          * @private
          */
         this.emit('debug_send', data);
