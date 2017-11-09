@@ -35,7 +35,11 @@ class Shard extends EventEmitter {
             /**
              * @event Client#event
              * @type {Object}
-             * @description Emitted when an event is received from discord
+             * @description Emitted when an event is received from discord, this event is a raw discord event.
+             *
+             * Packets that are guaranteed to be emitted to you are OP 0 (DISPATCH) and OP 4 (VOICE STATE UPDATE)
+             *
+             * **Other OPs may be catched by the library and used for internal processing, so you should not count on them**
              * @example
              * //Connect bot to discord and listen for received events
              * let bot = new CloudStorm(token)
