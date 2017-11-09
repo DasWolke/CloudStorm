@@ -175,7 +175,7 @@ class DiscordConnector extends EventEmitter {
                     browser: 'CloudStorm',
                     device: 'CloudStorm'
                 },
-                large_threshold: this.options.large_guild_threshold,
+                large_threshold: this.options.largeGuildThreshold,
                 shard: [this.id, this.options.shardAmount],
                 presence: this.options.initialPresence ? this._checkPresenceData(this.options.initialPresence) : null
             }

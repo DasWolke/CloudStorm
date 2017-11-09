@@ -30,7 +30,7 @@ class Client extends EventEmitter {
      * Create a new Client to connect to the gateway
      * @param {String} token - token received from creating a discord bot user, which will be used to connect to the gateway
      * @param {Object} [options]
-     * @param {Number} [options.large_guild_threshold=250] - Value between 50 and 250 at which the discord gateway stops sending offline guild members
+     * @param {Number} [options.largeGuildThreshold=250] - Value between 50 and 250 at which the discord gateway stops sending offline guild members
      * @param {Number} [options.firstShardId=0] - Id of the first shard that should be started
      * @param {Number} [options.lastShardId=0] - Id of the last shard that should be started, not to be confused with shardAmount, lastShardId tells CloudStorm the range of shardId's to spawn,
      * so you can use this parameter to run multi-process sharding where one CloudStorm instance running multiple shards runs in one process.
@@ -47,7 +47,7 @@ class Client extends EventEmitter {
             throw new Error('Missing token!');
         }
         this.options = {
-            large_guild_threshold: 250,
+            largeGuildThreshold: 250,
             firstShardId: 0,
             lastShardId: 0,
             shardAmount: 1,
