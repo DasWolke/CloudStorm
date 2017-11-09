@@ -8,19 +8,20 @@ try {
 const DiscordConnector = require('./connector/DiscordConnector');
 
 /**
- * Shard class, which provides a wrapper around the DiscordConnector with metadata like the id of the shard
+ * @typedef Shard
+ * @description Shard class, which provides a wrapper around the DiscordConnector with metadata like the id of the shard
  * @property {Number} id - Id of the shard
  * @property {Client} client - main class used for forwarding events
  * @property {Boolean} forceIdentify - whether the connector should not try to resume and re-identify
  * @property {Boolean} ready - if this shard has successfully connected and identified with the gateway
  * @property {DiscordConnector} connector - connector used for connecting to discord
- * @private
  */
 class Shard extends EventEmitter {
     /**
      * Create a new Shard
      * @param {Number} id - Id of the shard
      * @param {Client} client - main class used for forwarding events
+     * @private
      */
     constructor(id, client) {
         super();
@@ -30,11 +31,18 @@ class Shard extends EventEmitter {
         this.ready = false;
         this.connector = new DiscordConnector(id, client);
         this.connector.on('event', (event) => {
-            event.d.shard_id = this.id;
+            event.shard_id = this.id;
             /**
              * @event Client#event
              * @type {Object}
              * @description Emitted when an event is received from discord
+             * @example
+             * //Connect bot to discord and listen for received events
+             * let bot = new CloudStorm(token)
+             * await bot.connect()
+             * bot.on('event', (event) => {
+             *   // Do something with the event
+             * });
              */
             this.client.emit('event', event);
         });
@@ -70,6 +78,7 @@ class Shard extends EventEmitter {
 
     /**
      * Create a new Connection to discord
+     * @protected
      */
     connect() {
         if (this.forceIdentify) {
@@ -82,6 +91,7 @@ class Shard extends EventEmitter {
     /**
      * Close the current connection
      * @returns {Promise.<void>}
+     * @protected
      */
     disconnect() {
         return this.connector.disconnect();
@@ -91,6 +101,7 @@ class Shard extends EventEmitter {
      * Send a status update payload to discord
      * @param {Presence} data - data to send
      * @returns {Promise.<void>}
+     * @protected
      */
     statusUpdate(data) {
         return this.connector.statusUpdate(data);
@@ -100,6 +111,7 @@ class Shard extends EventEmitter {
      * Send a voice state update payload to discord
      * @param {VoiceStateUpdate} data - data to send
      * @returns {Promise.<void>}
+     * @protected
      */
     voiceStateUpdate(data) {
         return this.connector.voiceStateUpdate(data);
@@ -109,6 +121,7 @@ class Shard extends EventEmitter {
      * Send a request guild members payload to discord
      * @param {RequestGuildMembers} data - data to send
      * @returns {Promise.<void>}
+     * @protected
      */
     requestGuildMembers(data) {
         return this.connector.requestGuildMembers(data);

@@ -7,12 +7,14 @@
  * @property {Number} remaining - Remaining amount of executions during the current timeframe
  * @property {Number} limitReset - Timeframe in milliseconds until the ratelimit resets
  * @property {Object} resetTimeout - Timeout that calls the reset function once the timeframe passed
+ * @private
  */
 class RatelimitBucket {
     /**
      * Create a new Bucket
      * @param {Number} [limit=5] - Number of functions that may be executed during the timeframe set in limitReset
      * @param {Number} [limitReset=5000] - Timeframe in milliseconds until the ratelimit resets
+     * @private
      */
     constructor(limit = 5, limitReset = 5000) {
         this.fnQueue = [];
@@ -26,6 +28,7 @@ class RatelimitBucket {
      * Queue a function to be executed
      * @param {Function} fn - function to be executed
      * @returns {Promise.<void>} - Result of the function if any
+     * @protected
      */
     queue(fn) {
         return new Promise((res, rej) => {
@@ -55,6 +58,7 @@ class RatelimitBucket {
 
     /**
      * Check if there are any functions in the queue that haven't been executed yet
+     * @protected
      */
     checkQueue() {
         if (this.fnQueue.length > 0 && this.remaining !== 0) {
@@ -65,6 +69,7 @@ class RatelimitBucket {
 
     /**
      * Reset the remaining tokens to the base limit
+     * @protected
      */
     resetRemaining() {
         this.remaining = this.limit;
@@ -74,6 +79,7 @@ class RatelimitBucket {
 
     /**
      * Clear the current queue of events to be sent
+     * @protected
      */
     dropQueue() {
         this.fnQueue = [];

@@ -16,7 +16,8 @@ let WebSocket = require('ws');
 let RatelimitBucket = require('./RatelimitBucket');
 
 /**
- * Helper Class for simplifying the websocket connection to discord
+ * @typedef BetterWs
+ * @description Helper Class for simplifying the websocket connection to discord
  * @property {WebSocket} ws - the raw websocket connection
  * @property {RatelimitBucket} wsBucket - ratelimit bucket for the general websocket connection
  * @property {RatelimitBucket} statusBucket - ratelimit bucket for the 5/60s status update ratelimit
@@ -24,6 +25,12 @@ let RatelimitBucket = require('./RatelimitBucket');
  * @private
  */
 class BetterWs extends EventEmitter {
+    /**
+     * Create a new BetterWs instance
+     * @param {String} address
+     * @param {Object} options
+     * @private
+     */
     constructor(address, options = {}) {
         super();
         this.ws = new WebSocket(address, options);
@@ -39,6 +46,7 @@ class BetterWs extends EventEmitter {
     /**
      * Get the raw websocket connection currently used
      * @returns {WebSocket}
+     * @protected
      */
     get rawWs() {
         return this.ws;
@@ -47,6 +55,7 @@ class BetterWs extends EventEmitter {
     /**
      * Add eventlisteners to a passed websocket connection
      * @param {WebSocket} ws - websocket
+     * @protected
      */
     bindWs(ws) {
         ws.on('message', (msg) => {
@@ -60,7 +69,7 @@ class BetterWs extends EventEmitter {
              * @description Emitted upon errors from the underlying websocket
              * @private
              */
-            this.emit(err);
+            this.emit('error', err);
         });
         ws.on('open', () => this.onOpen());
     }
@@ -69,6 +78,7 @@ class BetterWs extends EventEmitter {
      * Create a new Websocket Connection if the old one was closed/destroyed
      * @param {String} address - address to connect to
      * @param {Object} options - options used by the websocket connection
+     * @protected
      */
     recreateWs(address, options = {}) {
         this.ws.removeAllListeners();
@@ -82,6 +92,7 @@ class BetterWs extends EventEmitter {
 
     /**
      * Called upon opening of the websocket connection
+     * @protected
      */
     onOpen() {
         /**
@@ -97,6 +108,7 @@ class BetterWs extends EventEmitter {
      * Called once a websocket message is received,
      * uncompresses the message using zlib and parses it via Erlpack or JSON.parse
      * @param {Object|Buffer|String} message - message received by websocket
+     * @protected
      */
     onMessage(message) {
         try {
@@ -136,6 +148,7 @@ class BetterWs extends EventEmitter {
      * Called when the websocket connection closes for some reason
      * @param {Number} code - websocket close code
      * @param {String} reason - reason of the close if any
+     * @protected
      */
     onClose(code, reason) {
         /**
@@ -152,6 +165,7 @@ class BetterWs extends EventEmitter {
      * Send a message to the discord gateway
      * @param {Object} data - data to send
      * @returns {Promise.<void>}
+     * @protected
      */
     sendMessage(data) {
         /**
@@ -197,6 +211,7 @@ class BetterWs extends EventEmitter {
      * @param {Number} code=1000 - websocket close code to use
      * @param {String} reason - reason of the disconnect
      * @returns {Promise.<void>}
+     * @protected
      */
     close(code = 1000, reason = '') {
         return new Promise((res, rej) => {

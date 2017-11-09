@@ -9,7 +9,8 @@ const BetterWs = require('../structures/BetterWs');
 const OP = require('../Constants').GATEWAY_OP_CODES;
 
 /**
- * Class used for acting based on received events
+ * @typedef DiscordConnector
+ * @description Class used for acting based on received events
  * @property {String} id - id of the shard that created this class
  * @property {Client} client - Main client instance
  * @property {Object} options - options passed from the main client instance
@@ -21,13 +22,13 @@ const OP = require('../Constants').GATEWAY_OP_CODES;
  * @property {String} status - status of this connector
  * @property {String} sessionId - session id of the current session, used in RESUMES
  * @property {Boolean} forceIdentify - whether the connector should just IDENTIFY again and don't try to resume
- * @private
  */
 class DiscordConnector extends EventEmitter {
     /**
      * Create a new Discord Connector
      * @param {String} id - id of the shard that created this class
      * @param {Client} client - Main client instance
+     * @private
      */
     constructor(id, client) {
         super();
@@ -46,6 +47,7 @@ class DiscordConnector extends EventEmitter {
 
     /**
      * Connect to discord
+     * @protected
      */
     connect() {
         if (!this.betterWs) {
@@ -86,6 +88,7 @@ class DiscordConnector extends EventEmitter {
     /**
      * Close the websocket connection and disconnect
      * @returns {Promise.<void>}
+     * @protected
      */
     disconnect() {
         return this.betterWs.close();
@@ -94,6 +97,7 @@ class DiscordConnector extends EventEmitter {
     /**
      * Called with a parsed Websocket message to execute further actions
      * @param {Object} message - message that was received
+     * @protected
      */
     messageAction(message) {
         /**
@@ -144,6 +148,7 @@ class DiscordConnector extends EventEmitter {
 
     /**
      * Reset this connector
+     * @protected
      */
     reset() {
         this.sessionId = null;
@@ -156,6 +161,7 @@ class DiscordConnector extends EventEmitter {
      * Send a identify payload to the gateway
      * @param {Boolean} force - Whether CloudStorm should send an IDENTIFY even if there's a session that could be resumed
      * @returns {Promise.<void>}
+     * @protected
      */
     identify(force) {
         if (this.sessionId && !this.forceIdentify && !force) {
@@ -181,6 +187,7 @@ class DiscordConnector extends EventEmitter {
     /**
      * Send a resume payload to the gateway
      * @returns {Promise.<void>}
+     * @protected
      */
     resume() {
         return this.betterWs.sendMessage({
@@ -191,6 +198,7 @@ class DiscordConnector extends EventEmitter {
 
     /**
      * Send a heartbeat to discord
+     * @protected
      */
     heartbeat() {
         this.betterWs.sendMessage({op: OP.HEARTBEAT, d: this.seq});
@@ -199,6 +207,7 @@ class DiscordConnector extends EventEmitter {
     /**
      * Handle dispatch events
      * @param {Object} message - message received from the websocket
+     * @protected
      */
     handleDispatch(message) {
         switch (message.t) {
@@ -238,6 +247,7 @@ class DiscordConnector extends EventEmitter {
      * Handle a close from the underlying websocket
      * @param {Number} code - websocket close code
      * @param {String} reason - close reason if any
+     * @protected
      */
     handleWsClose(code, reason) {
         let forceIdentify = false;
@@ -295,6 +305,7 @@ class DiscordConnector extends EventEmitter {
     /**
      * Send a status update payload to discord
      * @param {Presence} data - presence data to send
+     * @protected
      */
     statusUpdate(data = {}) {
         return this.betterWs.sendMessage({op: OP.STATUS_UPDATE, d: this._checkPresenceData(data)});
@@ -304,6 +315,7 @@ class DiscordConnector extends EventEmitter {
      * Send a voice state update payload to discord
      * @param {VoiceStateUpdate} data - voice state update data to send
      * @returns {Promise.<void>}
+     * @protected
      */
     voiceStateUpdate(data) {
         if (!data) {
@@ -316,6 +328,7 @@ class DiscordConnector extends EventEmitter {
      * Send a request guild members payload to discord
      * @param {RequestGuildMembers} data - data to send
      * @returns {Promise.<void>}
+     * @protected
      */
     requestGuildMembers(data = {}) {
         return this.betterWs.sendMessage({op: OP.REQUEST_GUILD_MEMBERS, d: this._checkRequestGuildMembersData(data)});
@@ -332,6 +345,9 @@ class DiscordConnector extends EventEmitter {
         data.game = data.game || null;
         if (data.game && !data.game.type) {
             data.game.type = data.game.url ? 1 : 0;
+        }
+        if (!data.game.name) {
+            data.game = null;
         }
         data.afk = data.afk || false;
         data.since = data.since || false;

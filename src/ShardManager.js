@@ -2,18 +2,19 @@
 let Shard = require('./Shard');
 
 /**
- * Class used for managing shards for the user
+ * @typedef ShardManager
+ * @description Class used for managing shards for the user
  * @property {Client} client - client that created this shard manager
  * @property {Object} options - options of the [client](Client.html)
  * @property {Object} shards - Object with a map of shards, mapped by shard id
  * @property {Array} connectQueue - Array containing shards that are not connected yet or have to be reconnected
  * @property {Number} connectQueueInterval - Time in milliseconds for the interval checking any shards that may need to be connected to discord
- * @private
  */
 class ShardManager {
     /**
      * Create a new ShardManager
      * @param {Client} client
+     * @private
      */
     constructor(client) {
         this.client = client;
@@ -31,6 +32,7 @@ class ShardManager {
 
     /**
      * Create the shard instances and add them to the connection queue
+     * @protected
      */
     spawn() {
         for (let i = this.options.firstShardId; i < this.options.lastShardId + 1; i++) {
@@ -49,6 +51,7 @@ class ShardManager {
 
     /**
      * Disconnect all shards
+     * @protected
      */
     disconnect() {
         for (let shardKey in this.shards) {
@@ -155,6 +158,13 @@ class ShardManager {
          * @event Client#ready
          * @type {void}
          * @description Emitted when all shards turn ready
+         * @example
+         * //Connect bot to discord and get a log in the console once it's ready
+         * let bot = new CloudStorm(token)
+         * await bot.connect()
+         * bot.on('ready', () => {
+         *   // The bot has connected to discord successfully and authenticated with the gateway
+         * });
          */
         this.client.emit('ready');
     }
@@ -182,6 +192,7 @@ class ShardManager {
     /**
      * Update the status of all currently connected shards
      * @param {Presence} data - payload to send
+     * @protected
      */
     statusUpdate(data = {}) {
         for (let shardKey in this.shards) {
@@ -198,7 +209,8 @@ class ShardManager {
      * Send a voice state update payload with a certain shard
      * @param {Number} shardId - id of the shard
      * @param {VoiceStateUpdate} data - payload to send
-     * @returns {Promise}
+     * @returns {Promise.<void>}
+     * @protected
      */
     voiceStateUpdate(shardId, data) {
         return new Promise((res, rej) => {
@@ -219,7 +231,8 @@ class ShardManager {
      * Send a request guild members payload with a certain shard
      * @param {Number} shardId - id of the shard
      * @param {RequestGuildMembers} data - payload to send
-     * @returns {Promise}
+     * @returns {Promise.<void>}
+     * @protected
      */
     requestGuildMembers(shardId, data) {
         return new Promise((res, rej) => {
