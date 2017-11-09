@@ -4,6 +4,8 @@ let Shard = require('./Shard');
 /**
  * @typedef ShardManager
  * @description Class used for managing shards for the user
+ *
+ * This class is automatically instantiated by the library and is documented for reference
  * @property {Client} client - client that created this shard manager
  * @property {Object} options - options of the [client](Client.html)
  * @property {Object} shards - Object with a map of shards, mapped by shard id
@@ -195,14 +197,37 @@ class ShardManager {
      * @protected
      */
     statusUpdate(data = {}) {
+        let shardPromises = [];
         for (let shardKey in this.shards) {
             if (this.shards.hasOwnProperty(shardKey)) {
                 let shard = this.shards[shardKey];
                 if (shard.ready) {
-                    shard.statusUpdate(data);
+                    shardPromises.push(shard.statusUpdate(data));
                 }
             }
         }
+        return Promise.all(shardPromises);
+    }
+
+    /**
+     * Update the status of a single connected shard
+     * @param {Number} shardId - internal id of the shard
+     * @param {Presence} data - payload to send
+     * @protected
+     */
+    shardStatusUpdate(shardId, data = {}) {
+        return new Promise((res, rej) => {
+            let shard = this.shards[shardId];
+            if (!shard) {
+                rej(new Error(`Shard ${shardId} does not exist`));
+            }
+            if (!shard.ready) {
+                shard.once('ready', () => {
+                    shard.statusUpdate(data).then(result => res(result)).catch(e => rej(e));
+                });
+            }
+            shard.statusUpdate(data).then(result => res(result)).catch(e => rej(e));
+        });
     }
 
     /**

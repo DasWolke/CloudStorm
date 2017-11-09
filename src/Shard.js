@@ -6,10 +6,13 @@ try {
     EventEmitter = require('events').EventEmitter;
 }
 const DiscordConnector = require('./connector/DiscordConnector');
+const OP_CODES = require('./Constants').GATEWAY_OP_CODES;
 
 /**
  * @typedef Shard
  * @description Shard class, which provides a wrapper around the DiscordConnector with metadata like the id of the shard
+ *
+ * This class is automatically instantiated by the library and is documented for reference
  * @property {Number} id - Id of the shard
  * @property {Client} client - main class used for forwarding events
  * @property {Boolean} forceIdentify - whether the connector should not try to resume and re-identify
@@ -49,6 +52,32 @@ class Shard extends EventEmitter {
              * });
              */
             this.client.emit('event', event);
+            switch (event.op) {
+                case OP_CODES.DISPATCH:
+                    /**
+                     * @event Client#dispatch
+                     * @type {Object}
+                     * @description Emitted when a OP **dispatch** event is received by the bot
+                     *
+                     * Dispatch events are usual events that happen on discord like message_create, presence_update, etc..
+                     */
+                    this.client.emit('dispatch', event);
+                    break;
+                case OP_CODES.VOICE_STATE_UPDATE:
+                    /**
+                     * @event Client#voiceStateUpdate
+                     * @type {Object}
+                     * @description Emitted when a OP **voice state update** event is received by the bot
+                     * @property {String} guild_id - id of the guild
+                     * @property {String|null} channel_id - id of the channel that was joined or null if the user is leaving the channel
+                     * @property {Boolean} self_mute - if the user is muted
+                     * @property {Boolean} self_deaf - if the user is deafened
+                     */
+                    this.client.emit('voiceStateUpdate', event);
+                    break;
+                default:
+                    break;
+            }
         });
         this.connector.on('disconnect', (...args) => {
             this.ready = false;

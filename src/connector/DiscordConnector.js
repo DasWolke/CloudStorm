@@ -11,6 +11,8 @@ const OP = require('../Constants').GATEWAY_OP_CODES;
 /**
  * @typedef DiscordConnector
  * @description Class used for acting based on received events
+ *
+ * This class is automatically instantiated by the library and is documented for reference
  * @property {String} id - id of the shard that created this class
  * @property {Client} client - Main client instance
  * @property {Object} options - options passed from the main client instance
@@ -76,12 +78,11 @@ class DiscordConnector extends EventEmitter {
         });
         this.betterWs.on('debug_send', data => {
             /**
-             * @event Client#debug_send
+             * @event Client#rawSend
              * @type {Object}
-             * @description Forwarded event from the connector used for debugging what CloudStorm sends to discord
-             * @private
+             * @description Websocket payload which was sent to discord, this event is emitted on **every single** websocket message that was sent.
              */
-            this.client.emit('debug_send', data);
+            this.client.emit('rawSend', data);
         });
     }
 
@@ -101,12 +102,11 @@ class DiscordConnector extends EventEmitter {
      */
     messageAction(message) {
         /**
-         * @event Client#debug_receive
+         * @event Client#rawReceive
          * @type {Object}
-         * @description Debug the parsed Websocket messages received from discord
-         * @private
+         * @description Websocket message received from discord, this event is emitted on **every single** websocket message you may receive.
          */
-        this.client.emit('debug_receive', message);
+        this.client.emit('rawReceive', message);
         switch (message.op) {
             case OP.DISPATCH:
                 if (message.s) {

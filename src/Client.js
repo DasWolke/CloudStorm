@@ -104,6 +104,7 @@ class Client extends EventEmitter {
      * @param {String} [data.game.name] - name of the game (required when data.game is not null)
      * @param {Number} [data.game.type=0] - type of the game, see [game types](https://discordapp.com/developers/docs/topics/gateway#gateway-status-update-status-types)
      * @param {String} [data.game.url] - url of the game, used when streaming in combination with data.game.type=1 to provide a link to the account of streamer, **only https://twitch.tv is supported atm**
+     * @returns {Promise.<void>} Promise that's resolved once all shards have sent the websocket payload
      * @example
      * //Connect bot to discord and set status to do not disturb and game to "Memes are Dreams"
      * let bot = new CloudStorm(token)
@@ -115,6 +116,29 @@ class Client extends EventEmitter {
      */
     statusUpdate(data) {
         this.shardManager.statusUpdate(data);
+    }
+
+    /**
+     * Send a status update to discord, which updates the status of a single shard
+     * @param {Number} shardId Id of the shard that should update it's status
+     * @param {Presence} data - Presence on a server, contains online status and game (if any)
+     * @param {String} [data.status=online] - Status of the bot, use one of the [status types](https://discordapp.com/developers/docs/topics/gateway#gateway-status-update-status-types)
+     * @param {Game} [data.game=null] - Game object which is used for showing games/streams
+     * @param {String} [data.game.name] - name of the game (required when data.game is not null)
+     * @param {Number} [data.game.type=0] - type of the game, see [game types](https://discordapp.com/developers/docs/topics/gateway#gateway-status-update-status-types)
+     * @param {String} [data.game.url] - url of the game, used when streaming in combination with data.game.type=1 to provide a link to the account of streamer, **only https://twitch.tv is supported atm**
+     * @returns {Promise.<void>} Promise that's resolved once the shard has sent the websocket payload
+     * @example
+     * //Connect bot to discord and set status to do not disturb and game to "Im shard 0"
+     * let bot = new CloudStorm(token)
+     * await bot.connect()
+     * bot.on('ready', () => {
+     *   // Bot is connected to discord and ready so we can update the status of shard 0
+     *   bot.shardStatusUpdate(0, {status:'dnd', game:{name:'Im shard 0'}})
+     * });
+     */
+    shardStatusUpdate(shardId, data) {
+        return this.shardManager.shardStatusUpdate(shardId, data);
     }
 
     /**
