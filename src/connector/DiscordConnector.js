@@ -65,6 +65,7 @@ class DiscordConnector extends EventEmitter {
             this.messageAction(msg);
         });
         this.betterWs.on('ws_close', (code, reason) => {
+            this.client.emit('debug', `Websocket of shard ${this.id} closed with code ${code} and reason: ${reason}`);
             this.handleWsClose(code, reason);
         });
         this.betterWs.on('debug', event => {
@@ -121,6 +122,7 @@ class DiscordConnector extends EventEmitter {
                 }, message.d.heartbeat_interval);
                 this._trace = message.d._trace;
                 this.identify();
+                this.client.emit('debug', `Shard ${this.id} received HELLO`);
                 break;
             case OP.HEARTBEAT_ACK:
                 break;
