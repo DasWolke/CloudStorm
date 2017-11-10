@@ -93,7 +93,7 @@ class DiscordConnector extends EventEmitter {
      * @protected
      */
     disconnect() {
-        return this.betterWs.close();
+        return this.betterWs.close(1000, 'Disconnect from User');
     }
 
     /**
@@ -290,7 +290,7 @@ class DiscordConnector extends EventEmitter {
             forceIdentify = true;
         }
         // don't try to reconnect when true
-        if (code === 1000) {
+        if (code === 1000 && reason === 'Disconnect from User') {
             gracefulClose = true;
         }
         clearInterval(this.heartbeatInterval);

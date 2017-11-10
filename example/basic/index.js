@@ -7,7 +7,6 @@ let startup = async () => {
     bot.on('event', (event) => {
         // Do stuff with the received event ¯\_(ツ)_/¯
     });
-
     bot.on('ready', () => {
         console.log('Bot received ready event');
     });

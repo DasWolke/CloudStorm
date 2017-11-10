@@ -10,6 +10,7 @@ let Shard = require('./Shard');
  * @property {Object} options - options of the [client](Client.html)
  * @property {Object} shards - Object with a map of shards, mapped by shard id
  * @property {Array} connectQueue - Array containing shards that are not connected yet or have to be reconnected
+ * @property {Date} lastConnectionAttempt - unix timestamp of the last time a shard tried connecting to discord
  * @property {Number} connectQueueInterval - Time in milliseconds for the interval checking any shards that may need to be connected to discord
  */
 class ShardManager {
