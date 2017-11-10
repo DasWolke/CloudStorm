@@ -348,7 +348,7 @@ class DiscordConnector extends EventEmitter {
         if (data.game && !data.game.type) {
             data.game.type = data.game.url ? 1 : 0;
         }
-        if (!data.game.name) {
+        if (data.game && !data.game.name) {
             data.game = null;
         }
         data.afk = data.afk || false;
