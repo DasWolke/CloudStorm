@@ -219,6 +219,7 @@ class DiscordConnector extends EventEmitter {
                     this.sessionId = message.d.session_id;
                 }
                 this.status = 'ready';
+                this._trace = message.d._trace;
                 /**
                  * @event DiscordConnector#ready
                  * @type {void}
