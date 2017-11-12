@@ -109,7 +109,7 @@ class ShardManager {
      * @private
      */
     _addListener(shard) {
-        shard.on('ready', () => {
+        shard.on('ready', (resume) => {
             this.shards[shard.id].ready = true;
             /**
              * @event Client#debug
@@ -117,7 +117,7 @@ class ShardManager {
              * @description used for debugging of the internals of the library
              * @private
              */
-            this.client.emit('debug', `Shard ${shard.id} is ready`);
+            this.client.emit('debug', `Shard ${shard.id} ${resume ? 'has resumed' : 'is ready'}`);
             this._checkReady();
         });
         shard.on('error', (error) => {

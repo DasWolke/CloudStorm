@@ -226,7 +226,7 @@ class DiscordConnector extends EventEmitter {
                  * @description Emitted once the connector is ready (again)
                  * @private
                  */
-                this.emit('ready');
+                this.emit('ready', message.t === 'RESUMED');
                 /**
                  * @event DiscordConnector#event
                  * @type {Object}
