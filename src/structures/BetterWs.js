@@ -82,6 +82,10 @@ class BetterWs extends EventEmitter {
      */
     recreateWs(address, options = {}) {
         this.ws.removeAllListeners();
+        this.zlibInflate = new zlib.Inflate({
+            chunkSize: 65535,
+            flush: zlib.Z_SYNC_FLUSH,
+        });
         this.ws = new WebSocket(address, options);
         this.options = options;
         this.wsBucket.dropQueue();
