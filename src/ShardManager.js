@@ -128,7 +128,7 @@ class ShardManager {
              */
             this.client.emit('error', error);
         });
-        shard.on('disconnect', (code, reason, forceIdentify) => {
+        shard.on('disconnect', (code, reason, forceIdentify, gracefulClose) => {
             /**
              * @event Client#debug
              * @type {String}
@@ -136,7 +136,7 @@ class ShardManager {
              * @private
              */
             this.client.emit('debug', `${shard.id} ws closed with code ${code} and reason: ${reason}`);
-            if (code === 1000) {
+            if (code === 1000 && gracefulClose) {
                 this._checkDisconnect();
                 return;
             }
