@@ -214,7 +214,7 @@ class DiscordConnector extends EventEmitter {
     handleDispatch(message) {
         switch (message.t) {
             case 'READY':
-            case 'RESUME':
+            case 'RESUMED':
                 if (message.t === 'READY') {
                     this.sessionId = message.d.session_id;
                 }
