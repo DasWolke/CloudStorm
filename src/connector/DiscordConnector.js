@@ -119,7 +119,7 @@ class DiscordConnector extends EventEmitter {
                 this.heartbeat();
                 this.heartbeatInterval = setInterval(() => {
                     this.heartbeat();
-                }, message.d.heartbeat_interval);
+                }, message.d.heartbeat_interval - 5000);
                 this._trace = message.d._trace;
                 this.identify();
                 this.client.emit('debug', `Shard ${this.id} received HELLO`);

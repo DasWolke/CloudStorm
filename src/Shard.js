@@ -98,14 +98,14 @@ class Shard extends EventEmitter {
              */
             this.emit('error', err);
         });
-        this.connector.on('ready', () => {
+        this.connector.on('ready', (resume) => {
             /**
              * @event Shard#ready
-             * @type {void}
-             * @description Emitted when the shard turns ready
+             * @type {Boolean}
+             * @description Emitted when the shard turns ready, has a boolean that can be used to check if the shard got a full ready or just a resume
              * @private
              */
-            this.emit('ready');
+            this.emit('ready', resume);
         });
     }
 

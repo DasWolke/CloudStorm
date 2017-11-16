@@ -118,6 +118,14 @@ class ShardManager {
              * @private
              */
             this.client.emit('debug', `Shard ${shard.id} ${resume ? 'has resumed' : 'is ready'}`);
+            /**
+             * @event Client#shardReady
+             * @type {Object}
+             * @property {Number} id - id of the shard
+             * @property {Boolean} ready - whether the shard turned ready or resumed
+             * @description Emitted when a single shard resumes or turns ready
+             */
+            this.client.emit('shardReady', {id: shard.id, ready: !resume});
             this._checkReady();
         });
         shard.on('error', (error) => {
