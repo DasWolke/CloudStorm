@@ -107,6 +107,15 @@ class Shard extends EventEmitter {
              */
             this.emit('ready', resume);
         });
+        this.connector.on('queueIdentify', () => {
+            /**
+             * @event Shard#queueIdentify
+             * @type {Number}
+             * @description Emitted when the underlying connector received an op9 code to tell the shard manager that the shard needs to be queued for re-identifying
+             * @private
+             */
+            this.emit('queueIdentify', this.id);
+        });
     }
 
     /**

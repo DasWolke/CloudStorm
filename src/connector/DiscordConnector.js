@@ -134,7 +134,13 @@ class DiscordConnector extends EventEmitter {
                 if (message.d && this.sessionId) {
                     this.resume();
                 } else {
-                    this.identify(true);
+                    /**
+                     * @event DiscordConnector#queueIdentify
+                     * @type {Number}
+                     * @description Emitted when the connector received an op9 code
+                     * @private
+                     */
+                    this.emit('queueIdentify', this.id);
                 }
                 break;
             default:

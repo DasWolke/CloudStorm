@@ -47,7 +47,7 @@ class ShardManager {
              */
             this.client.emit('debug', `Spawned shard ${i}`);
             this.shards[i] = new Shard(i, this.client);
-            this.connectQueue.push(this.shards[i]);
+            this.connectQueue.push({action: 'connect', shard: this.shards[i]});
             this._addListener(this.shards[i]);
         }
     }
@@ -66,22 +66,36 @@ class ShardManager {
     }
 
     /**
-     * Actually connect a single shard by calling it's connect() method and reset the connection timer
-     * @param {Shard} shard - shard that should connect to discord
+     * Actually connect/re-identify a single shard by calling it's connect() or identify() method and reset the connection timer
+     * @param {Object} data - Object with a shard and action key
+     * @param {String} data.action - Action to execute, can either be `connect` or `identify`
+     * @param {Shard} data.shard - shard that should connect to discord
      * @private
      */
-    _connectShard(shard) {
+    _connectShard({action, shard}) {
         /**
          * @event Client#debug
          * @type {String}
          * @description used for debugging of the internals of the library
          * @private
          */
-        this.client.emit('debug', `Connecting Shard ${shard.id} Status: ${shard.connector.status} Ready: ${shard.ready}`);
-        if (this.lastConnectionAttempt <= Date.now() - 6000 && shard.connector.status !== 'connecting' && !shard.ready) {
-            this.lastConnectionAttempt = Date.now();
-            this.client.emit('debug', `Connecting shard ${shard.id}`);
-            shard.connect();
+        this.client.emit('debug', `${action === 'connect' ? 'Connecting' : 'Identifying'} Shard ${shard.id} Status: ${shard.connector.status} Ready: ${shard.ready}`);
+        if (this.lastConnectionAttempt <= Date.now() - 6000) {
+            switch (action) {
+                case 'identify':
+                    this.lastConnectionAttempt = Date.now();
+                    this.client.emit('debug', `Identifying shard ${shard.id}`);
+                    shard.connector.identify(true);
+                    break;
+                case 'connect':
+                default:
+                    if (shard.connector.status !== 'connecting' && !shard.ready) {
+                        this.lastConnectionAttempt = Date.now();
+                        this.client.emit('debug', `Connecting shard ${shard.id}`);
+                        shard.connect();
+                    }
+                    break;
+            }
         }
     }
 
@@ -136,6 +150,7 @@ class ShardManager {
              */
             this.client.emit('error', error);
         });
+
         shard.on('disconnect', (code, reason, forceIdentify, gracefulClose) => {
             /**
              * @event Client#debug
@@ -149,7 +164,14 @@ class ShardManager {
                 return;
             }
             shard.forceIdentify = forceIdentify;
-            this.connectQueue.push(shard);
+            this.connectQueue.push({action: 'connect', shard});
+        });
+        shard.on('queueIdentify', (shardId) => {
+            if (!this.shards[shardId]) {
+                this.client.emit('debug', `Received a queueIdentify event for not existing shard ${shardId}`);
+                return;
+            }
+            this.connectQueue.unshift({action: 'identify', shard: this.shards[shardId]});
         });
     }
 
