@@ -108,21 +108,29 @@ class DiscordConnector extends EventEmitter {
          * @description Websocket message received from discord, this event is emitted on **every single** websocket message you may receive.
          */
         this.client.emit('rawReceive', message);
+        if (message.s) {
+            if (message.s > this.seq + 1) {
+                this.client.emit('debug', `Shard ${this.id}, invalid sequence: current: ${this.seq} message: ${message.s}`);
+                this.seq = message.s;
+                this.resume();
+            }
+            this.seq = message.s;
+        }
         switch (message.op) {
             case OP.DISPATCH:
-                if (message.s) {
-                    this.seq = message.s;
-                }
                 this.handleDispatch(message);
                 break;
             case OP.HELLO:
                 this.heartbeat();
                 this.heartbeatInterval = setInterval(() => {
-                    this.heartbeat();
+                    this.heartbeat(message.d.heartbeat_interval);
                 }, message.d.heartbeat_interval - 5000);
                 this._trace = message.d._trace;
                 this.identify();
                 this.client.emit('debug', `Shard ${this.id} received HELLO`);
+                break;
+            case OP.HEARTBEAT:
+                this.heartbeat();
                 break;
             case OP.HEARTBEAT_ACK:
                 break;
@@ -134,6 +142,8 @@ class DiscordConnector extends EventEmitter {
                 if (message.d && this.sessionId) {
                     this.resume();
                 } else {
+                    this.seq = 0;
+                    this.sessionId = '';
                     /**
                      * @event DiscordConnector#queueIdentify
                      * @type {Number}
@@ -162,6 +172,7 @@ class DiscordConnector extends EventEmitter {
         this.sessionId = null;
         this.seq = 0;
         this._trace = null;
+        clearInterval(this.heartbeatInterval);
         this.heartbeatInterval = null;
     }
 

@@ -80,7 +80,7 @@ class ShardManager {
          * @private
          */
         this.client.emit('debug', `${action === 'connect' ? 'Connecting' : 'Identifying'} Shard ${shard.id} Status: ${shard.connector.status} Ready: ${shard.ready}`);
-        if (this.lastConnectionAttempt <= Date.now() - 7500) {
+        if (this.lastConnectionAttempt <= Date.now() - 6000) {
             switch (action) {
                 case 'identify':
                     this.lastConnectionAttempt = Date.now();
@@ -111,7 +111,7 @@ class ShardManager {
          * @private
          */
         this.client.emit('debug', `Checking queue Length: ${this.connectQueue.length} LastAttempt: ${this.lastConnectionAttempt} Current Time: ${Date.now()}`);
-        if (this.connectQueue.length > 0 && this.lastConnectionAttempt <= Date.now() - 7500) {
+        if (this.connectQueue.length > 0 && this.lastConnectionAttempt <= Date.now() - 6000) {
             this._connectShard(...this.connectQueue.splice(0, 1));
         }
     }
