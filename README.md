@@ -14,7 +14,7 @@ It makes no assumptions about the rest of your stack, therefore you can use it a
 - Well documented
 
 ### Gotchas with CloudStorm:
-You may wonder how you you are able to get the id of a shard where an event originated from, but don't fear, CLoudStorm helps you with that by adding a `shard_id` property to the events that are forwarded.
+You may wonder how you you are able to get the id of a shard where an event originated from, but don't fear, CloudStorm helps you with that by adding a `shard_id` property to the events that are forwarded.
 
 So an event you receive may look like this:
 ```json
