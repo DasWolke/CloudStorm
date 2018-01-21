@@ -1,24 +1,30 @@
 {
   "name": "Cloudstorm",
-  "version": "0.1.0",
-  "description": "Minimalistic Discord library that allows you to do whatever you want",
+  "version": "0.1.4",
+  "description": "Minimalistic Discord Gateway library",
   "main": "index.js",
-  "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+  "engines": {
+    "node": ">=8.0.0"
   },
-  "author": "DasWolke <wolke@weeb.sh>",
+  "scripts": {
+    "build:docs": "node_modules/.bin/docma -c docma.config.json"
+  },
+  "author": "wolke <wolke@weeb.sh>",
   "license": "MIT",
   "dependencies": {
-    "amqp": "^0.2.6",
-    "axios": "^0.16.2",
-    "ws": "^3.1.0"
+    "snowtransfer": "DasWolke/SnowTransfer#dev",
+    "ws": "^3.1.0",
+    "zlib-sync": "^0.1.3"
   },
   "devDependencies": {
+    "docma": "^1.5.1",
     "eslint": "^4.4.1"
   },
   "optionalDependencies": {
-    "@types/node": "^8.0.31",
-    "@types/ws": "^3.0.2",
-    "erlpack": "^0.1.2"
+    "@types/node": "8.0.31",
+    "@types/ws": "~3.0.2",
+    "amqp": "0.2.6",
+    "erlpack": "~0.1.2",
+    "eventemitter3": "~2.0.3"
   }
 }

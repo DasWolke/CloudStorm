@@ -1,0 +1,17 @@
+language: node_js
+node_js:
+- '8'
+install:
+- npm install
+script:
+- npm run build:docs
+deploy:
+- provider: pages
+  skip_cleanup: true
+  github_token: $github_token
+  local_dir: CloudStorm
+  on:
+    branch: dev
+env:
+  global:
+    secure: jaKLbvVGQiudHDsRxKZW9GH8Z0HL0oHQaQNA4rWOsgR1lVucJ/iMCNwStG0guFWdHlJFzVnVNtkNYRfKOfrzirVlOx/WDo3Ulwo9fyAC+k2yDIAqOJex6s5dtMRtr75cVYa6xUNyPE+ndJVY5wgc0Ocmt00gbE6LfAGzxlGDFq3yhueqibxUqAdYUPaJx8ckMMY8BbjFVwq9fnsyWH8x5iRDJTUtefYWcgHGfB4AuaYkyYnfjhEird6StSkmf/uaDEj9qJ8dtjxcCnsD3xTtD1d7MSvgXszPhZ/9El9e6Xky2+BWV6VJ8zCcFawXbkMK9qkMb5RI+ckfwqipqg3vyiUTa1ZG4NPNS6IK5uyvSGkjgAJksEfoTaxfm3H9oirqK97pYzxZDCUig4jKDtC32OqW6F4Tsijvsw4UQRh3EwlkObB7PWUPyEyoPawX847+9CpfOt59chJuN5UyqZepvK44L9lOMgWL/ohu4RjyFYHgfjShh2skeHPYD5SPhygXJrY4RjnvOhFsXRB9fSJCRTvcHofBR3p51orwxwvK15Q2vGOgMa7nsMiwF2xhXC0F0ulqZSpIPXEz/0nACm3b00XgJ4xfwFlqbDX3S0ERvTj9p3wwOQz77nZf1rnMe3QZIKWWYKwZLXxHcbB43j/E/M25z0mKZzJ3xNBukB2sX7c=
