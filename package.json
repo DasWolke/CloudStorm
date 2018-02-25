@@ -12,7 +12,7 @@
   "author": "wolke <wolke@weeb.sh>",
   "license": "MIT",
   "dependencies": {
-    "snowtransfer": "DasWolke/SnowTransfer#dev",
+    "snowtransfer": "^0.2.1",
     "ws": "^3.1.0",
     "zlib-sync": "^0.1.3"
   },
@@ -24,7 +24,7 @@
     "@types/node": "8.0.31",
     "@types/ws": "~3.0.2",
     "amqp": "0.2.6",
-    "erlpack": "~0.1.2",
+    "erlpack": "github:discordapp/erlpack",
     "eventemitter3": "~2.0.3"
   }
 }

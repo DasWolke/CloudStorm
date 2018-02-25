@@ -18,11 +18,7 @@ const SnowTransfer = require('snowtransfer');
 const ShardManager = require('./ShardManager');
 
 /**
- * @typedef Client
- * @description Main class used for receiving events and interacting with the discord gateway
- * @property {ShardManager} shardManager - shard manager used for managing a pool of shards (connections) to the discord gateway, discord requires you to shard your bot at 2500 guilds,
- * but you may do it earlier.
- * @property {String} version - version of this package, exposed so you can use it easier.
+ * Main class used for receiving events and interacting with the discord gateway
  * @extends {EventEmitter} EventEmitter
  */
 class Client extends EventEmitter {
@@ -38,6 +34,9 @@ class Client extends EventEmitter {
      * @param {Number} [options.shardAmount=1] - Amount of **total** shards connecting to discord
      * @param {Boolean} [options.reconnect=true] - If the bot should automatically reconnect to discord if it get's disconnected, **leave it set to true unless you know what you are doing**
      * @param {Presence} [options.initialPresence] - If you want to start the bot with an initial presence, you may set it here
+     * @property {ShardManager} shardManager - shard manager used for managing a pool of shards (connections) to the discord gateway, discord requires you to shard your bot at 2500 guilds,
+     * but you may do it earlier.
+     * @property {String} version - version of this package, exposed so you can use it easier.
      * @constructor
      * @returns {Client} a new CloudStorm instance
      */
