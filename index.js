@@ -1,10 +1,10 @@
-'use strict';
-let Client = require('./src/Client');
+"use strict";
+let Client = require("./src/Client");
 
 function createClient(...args) {
-    return new Client(...args);
+	return new Client(...args);
 }
 
 createClient.Client = Client;
-createClient.Constants = require('./src/Constants');
+createClient.Constants = require("./src/Constants");
 module.exports = createClient;

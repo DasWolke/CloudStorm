@@ -1,4 +1,4 @@
-declare module "Cloudstorm" {
+declare module "cloudstorm" {
     import { EventEmitter } from "events";
     import * as WebSocket from "ws";
     import { IClientOptions as IWSOptions } from "ws";
@@ -29,6 +29,7 @@ declare module "Cloudstorm" {
         shardAmount?: number;
         reconnect?: boolean;
         initialPresence?: IPresence;
+        intents?: import("./src/Intents").IntentResolvable
     }
 
     export interface IVoiceStateUpdate {
