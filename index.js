@@ -2,6 +2,7 @@
 let Client = require("./src/Client");
 
 function createClient(...args) {
+	// @ts-ignore
 	return new Client(...args);
 }
 

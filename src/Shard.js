@@ -1,30 +1,18 @@
 "use strict";
-let EventEmitter;
-try {
-	EventEmitter = require("eventemitter3").EventEmitter;
-} catch (e) {
-	EventEmitter = require("events").EventEmitter;
-}
+const { EventEmitter } = require("events");
 const DiscordConnector = require("./connector/DiscordConnector");
 const OP_CODES = require("./Constants").GATEWAY_OP_CODES;
 
 /**
- * @typedef Shard
- * @description Shard class, which provides a wrapper around the DiscordConnector with metadata like the id of the shard
+ * Shard class, which provides a wrapper around the DiscordConnector with metadata like the id of the shard
  *
  * This class is automatically instantiated by the library and is documented for reference
- * @property {Number} id - Id of the shard
- * @property {Client} client - main class used for forwarding events
- * @property {Boolean} forceIdentify - whether the connector should not try to resume and re-identify
- * @property {Boolean} ready - if this shard has successfully connected and identified with the gateway
- * @property {DiscordConnector} connector - connector used for connecting to discord
  */
 class Shard extends EventEmitter {
 	/**
 	 * Create a new Shard
-	 * @param {Number} id - Id of the shard
-	 * @param {Client} client - main class used for forwarding events
-	 * @private
+	 * @param {number} id - Id of the shard
+	 * @param {import("./Client")} client - main class used for forwarding events
 	 */
 	constructor(id, client) {
 		super();
@@ -56,7 +44,7 @@ class Shard extends EventEmitter {
 			case OP_CODES.DISPATCH:
 				/**
 					 * @event Client#dispatch
-					 * @type {Object}
+					 * @type {any}
 					 * @description Emitted when a OP **dispatch** event is received by the bot
 					 *
 					 * Dispatch events are usual events that happen on discord like message_create, presence_update, etc..
@@ -66,12 +54,12 @@ class Shard extends EventEmitter {
 			case OP_CODES.VOICE_STATE_UPDATE:
 				/**
 					 * @event Client#voiceStateUpdate
-					 * @type {Object}
+					 * @type {any}
 					 * @description Emitted when a OP **voice state update** event is received by the bot
-					 * @property {String} guild_id - id of the guild
-					 * @property {String|null} channel_id - id of the channel that was joined or null if the user is leaving the channel
-					 * @property {Boolean} self_mute - if the user is muted
-					 * @property {Boolean} self_deaf - if the user is deafened
+					 * @property {string} guild_id - id of the guild
+					 * @property {?string} channel_id - id of the channel that was joined or null if the user is leaving the channel
+					 * @property {boolean} self_mute - if the user is muted
+					 * @property {boolean} self_deaf - if the user is deafened
 					 */
 				this.client.emit("voiceStateUpdate", event);
 				break;
@@ -101,7 +89,7 @@ class Shard extends EventEmitter {
 		this.connector.on("ready", (resume) => {
 			/**
 			 * @event Shard#ready
-			 * @type {Boolean}
+			 * @type {boolean}
 			 * @description Emitted when the shard turns ready, has a boolean that can be used to check if the shard got a full ready or just a resume
 			 * @private
 			 */
@@ -110,7 +98,7 @@ class Shard extends EventEmitter {
 		this.connector.on("queueIdentify", () => {
 			/**
 			 * @event Shard#queueIdentify
-			 * @type {Number}
+			 * @type {number}
 			 * @description Emitted when the underlying connector received an op9 code to tell the shard manager that the shard needs to be queued for re-identifying
 			 * @private
 			 */
@@ -120,7 +108,6 @@ class Shard extends EventEmitter {
 
 	/**
 	 * Create a new Connection to discord
-	 * @protected
 	 */
 	connect() {
 		if (this.forceIdentify) {
@@ -132,8 +119,7 @@ class Shard extends EventEmitter {
 
 	/**
 	 * Close the current connection
-	 * @returns {Promise.<void>}
-	 * @protected
+	 * @returns {Promise<void>}
 	 */
 	disconnect() {
 		return this.connector.disconnect();
@@ -141,9 +127,8 @@ class Shard extends EventEmitter {
 
 	/**
 	 * Send a status update payload to discord
-	 * @param {Presence} data - data to send
-	 * @returns {Promise.<void>}
-	 * @protected
+	 * @param {import("../typings").IPresence} data - data to send
+	 * @returns {Promise<void>}
 	 */
 	statusUpdate(data) {
 		return this.connector.statusUpdate(data);
@@ -151,9 +136,8 @@ class Shard extends EventEmitter {
 
 	/**
 	 * Send a voice state update payload to discord
-	 * @param {VoiceStateUpdate} data - data to send
-	 * @returns {Promise.<void>}
-	 * @protected
+	 * @param {import("../typings").IVoiceStateUpdate} data - data to send
+	 * @returns {Promise<void>}
 	 */
 	voiceStateUpdate(data) {
 		return this.connector.voiceStateUpdate(data);
@@ -161,9 +145,8 @@ class Shard extends EventEmitter {
 
 	/**
 	 * Send a request guild members payload to discord
-	 * @param {RequestGuildMembers} data - data to send
-	 * @returns {Promise.<void>}
-	 * @protected
+	 * @param {import("../typings").IRequestGuildMembers} data - data to send
+	 * @returns {Promise<void>}
 	 */
 	requestGuildMembers(data) {
 		return this.connector.requestGuildMembers(data);
