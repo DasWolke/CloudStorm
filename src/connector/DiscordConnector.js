@@ -363,7 +363,7 @@ class DiscordConnector extends EventEmitter {
 	_checkPresenceData(data) {
 		data.status = data.status || "online";
 		data.game = data.game || null;
-		if (data.game && !data.game.type) {
+		if (data.game && data.game.type == undefined) {
 			data.game.type = data.game.url ? 1 : 0;
 		}
 		if (data.game && !data.game.name) {
