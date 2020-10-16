@@ -28,7 +28,7 @@ class Client extends EventEmitter {
 	 * @param {number} [options.shardAmount=1] - Amount of **total** shards connecting to discord
 	 * @param {boolean} [options.reconnect=true] - If the bot should automatically reconnect to discord if it get's disconnected, **leave it set to true unless you know what you are doing**
 	 * @param {import("../typings").IPresence} [options.initialPresence] - If you want to start the bot with an initial presence, you may set it here
-	 * @param {import("./Intents").IntentResolvable} [options.intents] If you want to pass Gateway Intents.
+	 * @param {import("../typings").IntentResolvable} [options.intents] If you want to pass Gateway Intents.
 	 * @property {ShardManager} shardManager - shard manager used for managing a pool of shards (connections) to the discord gateway, discord requires you to shard your bot at 2500 guilds,
 	 * but you may do it earlier.
 	 * @property {string} version - version of this package, exposed so you can use it easier.

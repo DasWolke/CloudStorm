@@ -57,12 +57,8 @@ const all = Object.values(flags).reduce((acc, p) => acc | p, 0);
 const non_privileged = all & ~privileged;
 
 /**
- * @typedef {number | Array<number> | keyof flags | Array<keyof flags>} IntentResolvable
- */
-
-/**
  * Resolves bitfields to their numeric form.
- * @param {IntentResolvable} [bit=0] - bit(s) to resolve
+ * @param {import("../typings").IntentResolvable} [bit=0] - bit(s) to resolve
  * @returns {number}
  */
 function resolve(bit = 0) {

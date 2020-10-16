@@ -13,4 +13,4 @@ module.exports.GATEWAY_OP_CODES = {
 	HELLO: 10,
 	HEARTBEAT_ACK: 11
 };
-module.exports.GATEWAY_VERSION = 6;
+module.exports.GATEWAY_VERSION = 8;
