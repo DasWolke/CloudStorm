@@ -1,5 +1,6 @@
 "use strict";
-module.exports.GATEWAY_OP_CODES = {
+
+export const GATEWAY_OP_CODES = {
 	DISPATCH: 0,
 	HEARTBEAT: 1,
 	IDENTIFY: 2,
@@ -12,5 +13,6 @@ module.exports.GATEWAY_OP_CODES = {
 	INVALID_SESSION: 9,
 	HELLO: 10,
 	HEARTBEAT_ACK: 11
-};
-module.exports.GATEWAY_VERSION = 8;
+}
+export const GATEWAY_VERSION = 8
+export default { GATEWAY_OP_CODES, GATEWAY_VERSION }

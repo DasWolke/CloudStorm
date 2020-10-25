@@ -1,5 +1,6 @@
 "use strict";
-let Shard = require("./Shard");
+
+import Shard from "./Shard";
 
 /**
  * Class used for managing shards for the user
@@ -7,11 +8,17 @@ let Shard = require("./Shard");
  * This class is automatically instantiated by the library and is documented for reference
  */
 class ShardManager {
+	public client: import("./Client");
+	public options: import("./Client")["options"];
+	public shards: { [id: number]: Shard };
+	public connectQueue: Array<{ action: string; shard: Shard }>;
+	public lastConnectionAttempt: number | null;
+	public connectQueueInterval: NodeJS.Timeout;
+
 	/**
 	 * Create a new ShardManager
-	 * @param {import("./Client")} client
 	 */
-	constructor(client) {
+	public constructor(client: import("./Client")) {
 		this.client = client;
 		this.options = client.options;
 		if (!this.options.connectQueueInterval) {
@@ -28,17 +35,13 @@ class ShardManager {
 	/**
 	 * Create the shard instances and add them to the connection queue
 	 */
-	spawn() {
-		for (let i = this.options.firstShardId; i < this.options.lastShardId + 1; i++) {
-			/**
-			 * @event Client#debug
-			 * @type {string}
-			 * @description used for debugging of the internals of the library
-			 * @private
-			 */
+	public spawn() {
+		const firstShardID = this.options.firstShardId ? this.options.firstShardId : 0;
+		const lastShardId = this.options.lastShardId ? this.options.lastShardId : 0;
+		for (let i = firstShardID; i < lastShardId + 1; i++) {
 			this.client.emit("debug", `Spawned shard ${i}`);
 			this.shards[i] = new Shard(i, this.client);
-			this.connectQueue.push({action: "connect", shard: this.shards[i]});
+			this.connectQueue.push({ action: "connect", shard: this.shards[i] });
 			this._addListener(this.shards[i]);
 		}
 	}
@@ -46,10 +49,10 @@ class ShardManager {
 	/**
 	 * Disconnect all shards
 	 */
-	disconnect() {
-		for (let shardKey in this.shards) {
+	public disconnect() {
+		for (const shardKey in this.shards) {
 			if (this.shards.hasOwnProperty(shardKey)) {
-				let shard = this.shards[shardKey];
+				const shard = this.shards[shardKey];
 				shard.disconnect();
 			}
 		}
@@ -57,20 +60,12 @@ class ShardManager {
 
 	/**
 	 * Actually connect/re-identify a single shard by calling it's connect() or identify() method and reset the connection timer
-	 * @param {Object} data - Object with a shard and action key
-	 * @param {string} data.action - Action to execute, can either be `connect` or `identify`
-	 * @param {Shard} data.shard - shard that should connect to discord
-	 * @private
+	 * @param data Object with a shard and action key
 	 */
-	_connectShard({action, shard}) {
-		/**
-		 * @event Client#debug
-		 * @type {string}
-		 * @description used for debugging of the internals of the library
-		 * @private
-		 */
+	private _connectShard(data: { action: string, shard: Shard }) {
+		const { action, shard } = data;
 		this.client.emit("debug", `${action === "connect" ? "Connecting" : "Identifying"} Shard ${shard.id} Status: ${shard.connector.status} Ready: ${shard.ready}`);
-		if (this.lastConnectionAttempt <= Date.now() - 6000) {
+		if (this.lastConnectionAttempt && (this.lastConnectionAttempt <= Date.now() - 6000)) {
 			switch (action) {
 			case "identify":
 				this.lastConnectionAttempt = Date.now();
@@ -91,63 +86,33 @@ class ShardManager {
 
 	/**
 	 * Check if there are shards that are not connected yet and connect them if over 6 seconds have passed since the last attempt
-	 * @private
 	 */
-	_checkQueue() {
-		/**
-		 * @event Client#debug
-		 * @type {string}
-		 * @description used for debugging of the internals of the library
-		 * @private
-		 */
+	private _checkQueue() {
 		this.client.emit("debug", `Checking queue Length: ${this.connectQueue.length} LastAttempt: ${this.lastConnectionAttempt} Current Time: ${Date.now()}`);
-		if (this.connectQueue.length > 0 && this.lastConnectionAttempt <= Date.now() - 6000) {
-			// @ts-ignore
-			this._connectShard(...this.connectQueue.splice(0, 1));
+		if (this.connectQueue.length > 0 && (this.lastConnectionAttempt && (this.lastConnectionAttempt <= Date.now() - 6000))) {
+			const toConnect = this.connectQueue.splice(0, 1);
+			for (const shard of toConnect) {
+				this._connectShard(shard);
+			}
 		}
 	}
 
 	/**
 	 * Add event listeners to a shard to that the manager can act on received events
-	 * @param {Shard} shard - shard to add the event listeners to
-	 * @private
+	 * @param shard shard to add the event listeners to
 	 */
-	_addListener(shard) {
+	private _addListener(shard: Shard) {
 		shard.on("ready", (resume) => {
 			this.shards[shard.id].ready = true;
-			/**
-			 * @event Client#debug
-			 * @type {string}
-			 * @description used for debugging of the internals of the library
-			 * @private
-			 */
 			this.client.emit("debug", `Shard ${shard.id} ${resume ? "has resumed" : "is ready"}`);
-			/**
-			 * @event Client#shardReady
-			 * @type {Object}
-			 * @property {number} id - id of the shard
-			 * @property {boolean} ready - whether the shard turned ready or resumed
-			 * @description Emitted when a single shard resumes or turns ready
-			 */
-			this.client.emit("shardReady", {id: shard.id, ready: !resume});
+			this.client.emit("shardReady", { id: shard.id, ready: !resume });
 			this._checkReady();
 		});
 		shard.on("error", (error) => {
-			/**
-			 * @event Client#error
-			 * @type {Error}
-			 * @description Emitted when an error occurs somewhere in the library
-			 */
 			this.client.emit("error", error);
 		});
 
 		shard.on("disconnect", (code, reason, forceIdentify, gracefulClose) => {
-			/**
-			 * @event Client#debug
-			 * @type {string}
-			 * @description used for debugging of the internals of the library
-			 * @private
-			 */
 			this.client.emit("debug", `${shard.id} ws closed with code ${code} and reason: ${reason}`);
 			if (code === 1000 && gracefulClose) {
 				this._checkDisconnect();
@@ -167,9 +132,8 @@ class ShardManager {
 
 	/**
 	 * Checks if all shards are ready
-	 * @private
 	 */
-	_checkReady() {
+	private _checkReady() {
 		for (let shardId in this.shards) {
 			if (this.shards.hasOwnProperty(shardId)) {
 				if (!this.shards[shardId].ready) {
@@ -177,26 +141,13 @@ class ShardManager {
 				}
 			}
 		}
-		/**
-		 * @event Client#ready
-		 * @type {void}
-		 * @description Emitted when all shards turn ready
-		 * @example
-		 * //Connect bot to discord and get a log in the console once it's ready
-		 * let bot = new CloudStorm(token)
-		 * await bot.connect()
-		 * bot.on('ready', () => {
-		 *   // The bot has connected to discord successfully and authenticated with the gateway
-		 * });
-		 */
 		this.client.emit("ready");
 	}
 
 	/**
 	 * Checks if all shards are disconnected
-	 * @private
 	 */
-	_checkDisconnect() {
+	private _checkDisconnect() {
 		for (let shardId in this.shards) {
 			if (this.shards.hasOwnProperty(shardId)) {
 				if (this.shards[shardId].connector.status !== "disconnected") {
@@ -204,21 +155,15 @@ class ShardManager {
 				}
 			}
 		}
-		/**
-		 * @event Client#disconnected
-		 * @type {void}
-		 * @description Emitted when all shards have disconnected successfully
-		 */
 		this.client.emit("disconnected");
 	}
 
 	/**
 	 * Update the status of all currently connected shards
-	 * @param {import("../typings").IPresence} data - payload to send
+	 * @param data payload to send
 	 */
-	// @ts-ignore
-	statusUpdate(data = {}) {
-		let shardPromises = [];
+	public async statusUpdate(data: import("./Types").IPresence = {}) {
+		let shardPromises: Array<Promise<void>> = [];
 		for (let shardKey in this.shards) {
 			if (this.shards.hasOwnProperty(shardKey)) {
 				let shard = this.shards[shardKey];
@@ -227,16 +172,15 @@ class ShardManager {
 				}
 			}
 		}
-		return Promise.all(shardPromises);
+		await Promise.all(shardPromises);
 	}
 
 	/**
 	 * Update the status of a single connected shard
-	 * @param {number} shardId - internal id of the shard
-	 * @param {import("../typings").IPresence} data - payload to send
+	 * @param shardId internal id of the shard
+	 * @param data payload to send
 	 */
-	// @ts-ignore
-	shardStatusUpdate(shardId, data = {}) {
+	public shardStatusUpdate(shardId: number, data: import("./Types").IPresence = {}): Promise<void> {
 		return new Promise((res, rej) => {
 			let shard = this.shards[shardId];
 			if (!shard) {
@@ -253,11 +197,10 @@ class ShardManager {
 
 	/**
 	 * Send a voice state update payload with a certain shard
-	 * @param {number} shardId - id of the shard
-	 * @param {import("../typings").IVoiceStateUpdate} data - payload to send
-	 * @returns {Promise<void>}
+	 * @param shardId id of the shard
+	 * @param data payload to send
 	 */
-	voiceStateUpdate(shardId, data) {
+	public voiceStateUpdate(shardId: number, data: import("./Types").IVoiceStateUpdate): Promise<void> {
 		return new Promise((res, rej) => {
 			let shard = this.shards[shardId];
 			if (!shard) {
@@ -274,11 +217,10 @@ class ShardManager {
 
 	/**
 	 * Send a request guild members payload with a certain shard
-	 * @param {number} shardId - id of the shard
-	 * @param {import("../typings").IRequestGuildMembers} data - payload to send
-	 * @returns {Promise<void>}
+	 * @param shardId id of the shard
+	 * @param data payload to send
 	 */
-	requestGuildMembers(shardId, data) {
+	public requestGuildMembers(shardId: number, data: import("./Types").IRequestGuildMembers): Promise<void> {
 		return new Promise((res, rej) => {
 			let shard = this.shards[shardId];
 			if (!shard) {
@@ -292,7 +234,6 @@ class ShardManager {
 			shard.requestGuildMembers(data).then(result => res(result)).catch(e => rej(e));
 		});
 	}
-
 }
 
-module.exports = ShardManager;
+export = ShardManager;

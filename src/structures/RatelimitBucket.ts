@@ -4,12 +4,18 @@
  * RatelimitBucket, used for ratelimiting the execution of functions
  */
 class RatelimitBucket {
+	public fnQueue: Array<{ fn: (...args: Array<any>) => any, callback: () => any }>;
+	public limit: number;
+	public remaining: number;
+	public limitReset: number;
+	public resetTimeout: NodeJS.Timeout | null;
+
 	/**
 	 * Create a new Bucket
-	 * @param {number} [limit=5] - Number of functions that may be executed during the timeframe set in limitReset
-	 * @param {number} [limitReset=5000] - Timeframe in milliseconds until the ratelimit resets
+	 * @param limit Number of functions that may be executed during the timeframe set in limitReset
+	 * @param limitReset Timeframe in milliseconds until the ratelimit resets
 	 */
-	constructor(limit = 5, limitReset = 5000) {
+	public constructor(limit: number = 5, limitReset: number = 5000) {
 		this.fnQueue = [];
 		this.limit = limit;
 		this.remaining = limit;
@@ -19,10 +25,10 @@ class RatelimitBucket {
 
 	/**
 	 * Queue a function to be executed
-	 * @param {() => any} fn - function to be executed
-	 * @returns {Promise<any>} - Result of the function if any
+	 * @param fn function to be executed
+	 * @returns Result of the function if any
 	 */
-	queue(fn) {
+	public queue(fn: (...args: Array<any>) => any): Promise<any> {
 		return new Promise((res, rej) => {
 			let wrapFn = () => {
 				this.remaining--;
@@ -33,7 +39,7 @@ class RatelimitBucket {
 					this.checkQueue();
 				}
 				if (fn instanceof Promise) {
-					return fn().then(res).catch(rej);
+					return fn.then(res).catch(rej);
 				}
 				return res(fn());
 			};
@@ -51,7 +57,7 @@ class RatelimitBucket {
 	/**
 	 * Check if there are any functions in the queue that haven't been executed yet
 	 */
-	checkQueue() {
+	private checkQueue() {
 		if (this.fnQueue.length > 0 && this.remaining !== 0) {
 			let queuedFunc = this.fnQueue.splice(0, 1)[0];
 			queuedFunc.callback();
@@ -61,18 +67,18 @@ class RatelimitBucket {
 	/**
 	 * Reset the remaining tokens to the base limit
 	 */
-	resetRemaining() {
+	private resetRemaining() {
 		this.remaining = this.limit;
-		clearTimeout(this.resetTimeout);
+		if (this.resetTimeout) clearTimeout(this.resetTimeout);
 		this.checkQueue();
 	}
 
 	/**
 	 * Clear the current queue of events to be sent
 	 */
-	dropQueue() {
+	public dropQueue() {
 		this.fnQueue = [];
 	}
 }
 
-module.exports = RatelimitBucket;
+export = RatelimitBucket;

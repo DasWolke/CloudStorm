@@ -1,8 +1,17 @@
 "use strict";
-const { EventEmitter } = require("events");
-const BetterWs = require("../structures/BetterWs");
-const OP = require("../Constants").GATEWAY_OP_CODES;
-const Intents = require("../Intents");
+
+import { EventEmitter } from "events";
+import BetterWs from "../structures/BetterWs";
+import { GATEWAY_OP_CODES as OP } from "../Constants";
+import Intents from "../Intents";
+
+interface ConnectorEvents {
+	queueIdentify: [number];
+	event: [import("../Types").IWSMessage];
+	ready: [boolean];
+	error: [string];
+	disconnect: [number, string, boolean, boolean];
+}
 
 /**
  * Class used for acting based on received events
@@ -10,17 +19,29 @@ const Intents = require("../Intents");
  * This class is automatically instantiated by the library and is documented for reference
  */
 class DiscordConnector extends EventEmitter {
+	public id: number;
+	public client: import("../Client");
+	public options: import("../Client")["options"];
+	public reconnect: boolean;
+	public betterWs: BetterWs | null;
+	public heartbeatInterval: NodeJS.Timeout | null;
+	public _trace: string | null;
+	public seq: number;
+	public status: string;
+	public sessionId: string | null;
+	public forceIdentify: boolean;
+
 	/**
 	 * Create a new Discord Connector
-	 * @param {number} id - id of the shard that created this class
-	 * @param {import("../Client")} client - Main client instance
+	 * @param id id of the shard that created this class
+	 * @param client Main client instance
 	 */
-	constructor(id, client) {
+	public constructor(id: number, client: import("../Client")) {
 		super();
 		this.id = id;
 		this.client = client;
 		this.options = client.options;
-		this.reconnect = this.options.reconnect;
+		this.reconnect = this.options.reconnect || true;
 		this.betterWs = null;
 		this.heartbeatInterval = null;
 		this._trace = null;
@@ -30,15 +51,27 @@ class DiscordConnector extends EventEmitter {
 		this.forceIdentify = false;
 	}
 
+	public emit<E extends keyof ConnectorEvents>(event: E, ...args: ConnectorEvents[E]) {
+		return super.emit(event, args);
+	}
+	public once<E extends keyof ConnectorEvents>(event: E, listener: (...args: ConnectorEvents[E]) => any) {
+		// @ts-ignore SHUT UP!!!
+		return super.once(event, listener);
+	}
+	public on<E extends keyof ConnectorEvents>(event: E, listener: (...args: ConnectorEvents[E]) => any) {
+		// @ts-ignore
+		return super.on(event, listener);
+	}
+
 	/**
 	 * Connect to discord
 	 */
-	connect() {
+	public connect() {
 		if (!this.betterWs) {
-			this.betterWs = new BetterWs(this.options.endpoint);
+			this.betterWs = new BetterWs(this.options.endpoint as string);
 		} else {
 			this.betterWs.removeAllListeners();
-			this.betterWs.recreateWs(this.options.endpoint);
+			this.betterWs.recreateWs(this.options.endpoint as string);
 		}
 		this.betterWs.on("ws_open", () => {
 			this.status = "connecting";
@@ -51,42 +84,25 @@ class DiscordConnector extends EventEmitter {
 			this.handleWsClose(code, reason);
 		});
 		this.betterWs.on("debug", event => {
-			/**
-			 * @event Client#debug
-			 * @type {any}
-			 * @description Debug event used for debugging the library
-			 * @private
-			 */
 			this.client.emit("debug", event);
 		});
 		this.betterWs.on("debug_send", data => {
-			/**
-			 * @event Client#rawSend
-			 * @type {any}
-			 * @description Websocket payload which was sent to discord, this event is emitted on **every single** websocket message that was sent.
-			 */
 			this.client.emit("rawSend", data);
 		});
 	}
 
 	/**
 	 * Close the websocket connection and disconnect
-	 * @returns {Promise<void>}
 	 */
-	disconnect() {
-		return this.betterWs.close(1000, "Disconnect from User");
+	public async disconnect(): Promise<void> {
+		return this.betterWs?.close(1000, "Disconnect from User") || undefined;
 	}
 
 	/**
 	 * Called with a parsed Websocket message to execute further actions
-	 * @param {any} message - message that was received
+	 * @param message message that was received
 	 */
-	messageAction(message) {
-		/**
-		 * @event Client#rawReceive
-		 * @type {any}
-		 * @description Websocket message received from discord, this event is emitted on **every single** websocket message you may receive.
-		 */
+	private messageAction(message: import("../Types").IGatewayMessage) {
 		this.client.emit("rawReceive", message);
 		if (message.s) {
 			if (message.s > this.seq + 1) {
@@ -116,7 +132,7 @@ class DiscordConnector extends EventEmitter {
 			break;
 		case OP.RECONNECT:
 			this.reset();
-			this.betterWs.close();
+			this.betterWs?.close();
 			break;
 		case OP.INVALID_SESSION:
 			if (message.d && this.sessionId) {
@@ -124,22 +140,10 @@ class DiscordConnector extends EventEmitter {
 			} else {
 				this.seq = 0;
 				this.sessionId = "";
-				/**
-					 * @event DiscordConnector#queueIdentify
-					 * @type {number}
-					 * @description Emitted when the connector received an op9 code
-					 * @private
-					 */
 				this.emit("queueIdentify", this.id);
 			}
 			break;
 		default:
-			/**
-				 * @event DiscordConnector#event
-				 * @type {any}
-				 * @description Forward the event
-				 * @private
-				 */
 			this.emit("event", message);
 		}
 	}
@@ -147,20 +151,19 @@ class DiscordConnector extends EventEmitter {
 	/**
 	 * Reset this connector
 	 */
-	reset() {
+	private reset() {
 		this.sessionId = null;
 		this.seq = 0;
 		this._trace = null;
-		clearInterval(this.heartbeatInterval);
+		if (this.heartbeatInterval) clearInterval(this.heartbeatInterval);
 		this.heartbeatInterval = null;
 	}
 
 	/**
 	 * Send a identify payload to the gateway
-	 * @param {boolean} [force] - Whether CloudStorm should send an IDENTIFY even if there's a session that could be resumed
-	 * @returns {Promise<void>}
+	 * @param force Whether CloudStorm should send an IDENTIFY even if there's a session that could be resumed
 	 */
-	identify(force) {
+	public async identify(force?: boolean): Promise<void> {
 		if (this.sessionId && !this.forceIdentify && !force) {
 			return this.resume();
 		}
@@ -179,32 +182,31 @@ class DiscordConnector extends EventEmitter {
 			}
 		};
 		this.forceIdentify = false;
-		return this.betterWs.sendMessage(data);
+		return this.betterWs?.sendMessage(data);
 	}
 
 	/**
 	 * Send a resume payload to the gateway
-	 * @returns {Promise<void>}
 	 */
-	resume() {
-		return this.betterWs.sendMessage({
+	private async resume(): Promise<void> {
+		return this.betterWs?.sendMessage({
 			op: OP.RESUME,
-			d: {seq: this.seq, token: this.options.token, session_id: this.sessionId}
+			d: { seq: this.seq, token: this.options.token, session_id: this.sessionId }
 		});
 	}
 
 	/**
 	 * Send a heartbeat to discord
 	 */
-	heartbeat() {
-		this.betterWs.sendMessage({op: OP.HEARTBEAT, d: this.seq});
+	private heartbeat() {
+		this.betterWs?.sendMessage({ op: OP.HEARTBEAT, d: this.seq });
 	}
 
 	/**
 	 * Handle dispatch events
-	 * @param {any} message - message received from the websocket
+	 * @param message message received from the websocket
 	 */
-	handleDispatch(message) {
+	private handleDispatch(message: import("../Types").IGatewayMessage) {
 		switch (message.t) {
 		case "READY":
 		case "RESUMED":
@@ -213,68 +215,32 @@ class DiscordConnector extends EventEmitter {
 			}
 			this.status = "ready";
 			this._trace = message.d._trace;
-			/**
-				 * @event DiscordConnector#ready
-				 * @type {void}
-				 * @description Emitted once the connector is ready (again)
-				 * @private
-				 */
 			this.emit("ready", message.t === "RESUMED");
-			/**
-				 * @event DiscordConnector#event
-				 * @type {Object}
-				 * @description Emitted once an event was received from discord
-				 * @private
-				 */
 			this.emit("event", message);
 			break;
 		default:
-			/**
-				 * @event DiscordConnector#event
-				 * @type {Object}
-				 * @description Emitted once an event was received from discord
-				 * @private
-				 */
 			this.emit("event", message);
 		}
 	}
 
 	/**
 	 * Handle a close from the underlying websocket
-	 * @param {number} code - websocket close code
-	 * @param {string} reason - close reason if any
+	 * @param code websocket close code
+	 * @param reason close reason if any
 	 */
-	handleWsClose(code, reason) {
+	private handleWsClose(code: number, reason: string) {
 		let forceIdentify = false;
 		let gracefulClose = false;
 		this.status = "disconnected";
 		if (code === 4004) {
-			/**
-			 * @event DiscordConnector#error
-			 * @type {string}
-			 * @description Emitted when the token was invalid
-			 * @private
-			 */
 			this.emit("error", "Tried to connect with an invalid token");
 			return;
 		}
 		if (code === 4010) {
-			/**
-			 * @event DiscordConnector#error
-			 * @type {string}
-			 * @description Emitted when the user tried to connect with bad sharding data
-			 * @private
-			 */
 			this.emit("error", "Invalid sharding data, check your client options");
 			return;
 		}
 		if (code === 4011) {
-			/**
-			 * @event DiscordConnector#error
-			 * @type {string}
-			 * @description Emitted when the shard would be on over 2500 guilds
-			 * @private
-			 */
 			this.emit("error", "Shard would be on over 2500 guilds. Add more shards");
 			return;
 		}
@@ -286,57 +252,47 @@ class DiscordConnector extends EventEmitter {
 		if (code === 1000 && reason === "Disconnect from User") {
 			gracefulClose = true;
 		}
-		clearInterval(this.heartbeatInterval);
-		this.betterWs.removeAllListeners();
-		/**
-		 * @event DiscordConnector#disconnect
-		 * @type {Object}
-		 * @property {number} code - websocket disconnect code
-		 * @private
-		 */
+		if (this.heartbeatInterval) clearInterval(this.heartbeatInterval);
+		this.betterWs?.removeAllListeners();
 		this.emit("disconnect", code, reason, forceIdentify, gracefulClose);
 	}
 
 	/**
 	 * Send a status update payload to discord
-	 * @param {import("../../typings").IPresence} data - presence data to send
+	 * @param data presence data to send
 	 */
-	// @ts-ignore
-	statusUpdate(data = {}) {
-		return this.betterWs.sendMessage({op: OP.STATUS_UPDATE, d: this._checkPresenceData(data)});
+	public async statusUpdate(data: import("../Types").IPresence = {}): Promise<void> {
+		return this.betterWs?.sendMessage({ op: OP.STATUS_UPDATE, d: this._checkPresenceData(data) });
 	}
 
 	/**
 	 * Send a voice state update payload to discord
-	 * @param {import("../../typings").IVoiceStateUpdate} data - voice state update data to send
-	 * @returns {Promise<void>}
+	 * @param data voice state update data to send
 	 */
-	voiceStateUpdate(data) {
+	public async voiceStateUpdate(data: import("../Types").IVoiceStateUpdate): Promise<void> {
 		if (!data) {
 			return Promise.resolve();
 		}
-		return this.betterWs.sendMessage({op: OP.VOICE_STATE_UPDATE, d: this._checkVoiceStateUpdateData(data)});
+		return this.betterWs?.sendMessage({ op: OP.VOICE_STATE_UPDATE, d: this._checkVoiceStateUpdateData(data) });
 	}
 
 	/**
 	 * Send a request guild members payload to discord
-	 * @param {import("../../typings").IRequestGuildMembers} data - data to send
-	 * @returns {Promise<void>}
+	 * @param data data to send
 	 */
-	// @ts-ignore
-	requestGuildMembers(data = {}) {
-		return this.betterWs.sendMessage({op: OP.REQUEST_GUILD_MEMBERS, d: this._checkRequestGuildMembersData(data)});
+	public async requestGuildMembers(data: import("../Types").IRequestGuildMembers): Promise<void> {
+		return this.betterWs?.sendMessage({ op: OP.REQUEST_GUILD_MEMBERS, d: this._checkRequestGuildMembersData(data) });
 	}
 
 	/**
 	 * Checks the presence data and fills in missing elements
-	 * @param {any} data - data to send
-	 * @returns {any} data after it's fixed/checked
+	 * @param data data to send
+	 * @returns data after it's fixed/checked
 	 */
-	_checkPresenceData(data) {
+	private _checkPresenceData(data: import("../Types").IPresence): import("../Types").IPresence {
 		data.status = data.status || "online";
 		data.game = data.game || null;
-		if (data.game && data.game.type == undefined) {
+		if (data.game && data.game.type === undefined) {
 			data.game.type = data.game.url ? 1 : 0;
 		}
 		if (data.game && !data.game.name) {
@@ -349,11 +305,10 @@ class DiscordConnector extends EventEmitter {
 
 	/**
 	 * Checks the voice state update data and fills in missing elements
-	 * @param {Object} data - data to send
-	 * @returns {Object} data after it's fixed/checked
-	 * @private
+	 * @param data data to send
+	 * @returns data after it's fixed/checked
 	 */
-	_checkVoiceStateUpdateData(data) {
+	private _checkVoiceStateUpdateData(data: import("../Types").IVoiceStateUpdate): import("../Types").IVoiceStateUpdate {
 		data.channel_id = data.channel_id || null;
 		data.self_mute = data.self_mute || false;
 		data.self_deaf = data.self_deaf || false;
@@ -362,15 +317,14 @@ class DiscordConnector extends EventEmitter {
 
 	/**
 	 * Checks the request guild members data and fills in missing elements
-	 * @param {Object} data - data to send
-	 * @returns {Object} data after it's fixed/checked
-	 * @private
+	 * @param data data to send
+	 * @returns data after it's fixed/checked
 	 */
-	_checkRequestGuildMembersData(data) {
+	private _checkRequestGuildMembersData(data: import("../Types").IRequestGuildMembers): import("../Types").IRequestGuildMembers {
 		data.query = data.query || "";
 		data.limit = data.limit || 0;
 		return data;
 	}
 }
 
-module.exports = DiscordConnector;
+export = DiscordConnector;

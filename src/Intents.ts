@@ -39,29 +39,25 @@ const flags = {
 
 /**
  * Bitfield representing all privileged intents
- * @type {number}
  * @see {@link https://discord.com/developers/docs/topics/gateway#privileged-intents}
  */
-const privileged = flags.GUILD_MEMBERS | flags.GUILD_PRESENCES;
+const privileged: number = flags.GUILD_MEMBERS | flags.GUILD_PRESENCES;
 
 /**
  * Bitfield representing all intents combined
- * @type {number}
  */
-const all = Object.values(flags).reduce((acc, p) => acc | p, 0);
+const all: number = Object.values(flags).reduce((acc, p) => acc | p, 0);
 
 /**
  * Bitfield representing all non-privileged intents
- * @type {number}
  */
-const non_privileged = all & ~privileged;
+const non_privileged: number = all & ~privileged;
 
 /**
  * Resolves bitfields to their numeric form.
- * @param {import("../typings").IntentResolvable} [bit=0] - bit(s) to resolve
- * @returns {number}
+ * @param bit bit(s) to resolve
  */
-function resolve(bit = 0) {
+function resolve(bit: import("./Types").IntentResolvable = 0): number {
 	if (typeof bit === "number" && bit >= 0) return bit;
 	if (typeof bit === "string") return flags[bit] | 0;
 	// @ts-ignore
@@ -71,4 +67,10 @@ function resolve(bit = 0) {
 }
 
 
-module.exports = { flags, all, privileged, non_privileged, resolve };
+export = {
+	flags,
+	all,
+	privileged,
+	non_privileged,
+	resolve
+};

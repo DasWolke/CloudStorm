@@ -1,60 +1,78 @@
 "use strict";
-const { EventEmitter } = require("events");
-const zlib = require("zlib-sync");
-let Erlpack;
+
+import { EventEmitter } from "events";
+import zlib from "zlib-sync";
+let Erlpack: typeof import("erlpack");
 try {
 	Erlpack = require("erlpack");
-} catch (e) {// eslint-disable-next-line no-empty
+	// eslint-disable-next-line no-empty
+} catch (e) {}
+import { GATEWAY_OP_CODES } from "../Constants";
+import WebSocket from "ws";
+
+import RatelimitBucket from "./RatelimitBucket";
+import { IGatewayMessage } from "../Types";
+
+interface BWSEvents {
+	error: [Error | string];
+	ws_open: [];
+	ws_close: [number, string];
+	ws_message: [import("../Types").IGatewayMessage];
+	debug_send: [import("../Types").IWSMessage];
+	debug: [string];
 }
-const GATEWAY_OP_CODES = require("../Constants").GATEWAY_OP_CODES;
-const WebSocket = require("ws");
-let RatelimitBucket = require("./RatelimitBucket");
 
 /**
  * Helper Class for simplifying the websocket connection to discord
  */
 class BetterWs extends EventEmitter {
+	public ws: WebSocket;
+	public wsBucket: RatelimitBucket;
+	public statusBucket: RatelimitBucket;
+	public zlibInflate: zlib.Inflate;
+	public options: WebSocket.ClientOptions;
+
 	/**
 	 * Create a new BetterWs instance
-	 * @param {string} address
-	 * @param {import("ws").ClientOptions} options
 	 */
-	constructor(address, options = {}) {
+	public constructor(address: string, options: import("ws").ClientOptions = {}) {
 		super();
 		this.ws = new WebSocket(address, options);
 		this.bindWs(this.ws);
 		this.wsBucket = new RatelimitBucket(120, 60000);
 		this.statusBucket = new RatelimitBucket(5, 60000);
-		this.zlibInflate = new zlib.Inflate({
-			chunkSize: 65535,
-			// @ts-ignore
-			flush: zlib.Z_SYNC_FLUSH
-		});
+		this.zlibInflate = new zlib.Inflate({ chunkSize: 65535 });
+	}
+
+	public emit<E extends keyof BWSEvents>(event: E, ...args: BWSEvents[E]) {
+		return super.emit(event, args);
+	}
+	public once<E extends keyof BWSEvents>(event: E, listener: (...args: BWSEvents[E]) => any) {
+		// @ts-ignore SHUT UP!!!
+		return super.once(event, listener);
+	}
+	public on<E extends keyof BWSEvents>(event: E, listener: (...args: BWSEvents[E]) => any) {
+		// @ts-ignore
+		return super.on(event, listener);
 	}
 
 	/**
 	 * Get the raw websocket connection currently used
 	 */
-	get rawWs() {
+	public get rawWs() {
 		return this.ws;
 	}
 
 	/**
 	 * Add eventlisteners to a passed websocket connection
-	 * @param {import("ws")} ws - websocket
+	 * @param ws websocket
 	 */
-	bindWs(ws) {
+	private bindWs(ws: import("ws")) {
 		ws.on("message", (msg) => {
-			this.onMessage(msg);
+			this.onMessage(msg as Buffer);
 		});
 		ws.on("close", (code, reason) => this.onClose(code, reason));
 		ws.on("error", (err) => {
-			/**
-			 * @event BetterWs#error
-			 * @type {Error}
-			 * @description Emitted upon errors from the underlying websocket
-			 * @private
-			 */
 			this.emit("error", err);
 		});
 		ws.on("open", () => this.onOpen());
@@ -62,16 +80,12 @@ class BetterWs extends EventEmitter {
 
 	/**
 	 * Create a new Websocket Connection if the old one was closed/destroyed
-	 * @param {string} address - address to connect to
-	 * @param {import("ws").ClientOptions} options - options used by the websocket connection
+	 * @param address address to connect to
+	 * @param options options used by the websocket connection
 	 */
-	recreateWs(address, options = {}) {
+	public recreateWs(address: string, options: import("ws").ClientOptions = {}) {
 		this.ws.removeAllListeners();
-		this.zlibInflate = new zlib.Inflate({
-			chunkSize: 65535,
-			// @ts-ignore
-			flush: zlib.Z_SYNC_FLUSH,
-		});
+		this.zlibInflate = new zlib.Inflate({ chunkSize: 65535 });
 		this.ws = new WebSocket(address, options);
 		this.options = options;
 		this.wsBucket.dropQueue();
@@ -83,22 +97,17 @@ class BetterWs extends EventEmitter {
 	/**
 	 * Called upon opening of the websocket connection
 	 */
-	onOpen() {
-		/**
-		 * @event BetterWs#ws_open
-		 * @type {void}
-		 * @description Emitted once the underlying websocket connection has opened
-		 * @private
-		 */
+	private onOpen() {
 		this.emit("ws_open");
 	}
 
 	/**
 	 * Called once a websocket message is received,
 	 * uncompresses the message using zlib and parses it via Erlpack or JSON.parse
-	 * @param {any|Buffer|string} message - message received by websocket
+	 * @param message message received by websocket
 	 */
-	onMessage(message) {
+	private onMessage(message: Buffer) {
+		let parsed: IGatewayMessage;
 		try {
 			const length = message.length;
 			const flush = length >= 4 &&
@@ -106,60 +115,34 @@ class BetterWs extends EventEmitter {
 				message[length - 3] === 0x00 &&
 				message[length - 2] === 0xFF &&
 				message[length - 1] === 0xFF;
-			this.zlibInflate.push(message, flush && zlib.Z_SYNC_FLUSH);
+			this.zlibInflate.push(message, flush ? zlib.Z_SYNC_FLUSH : false);
 			if (!flush) return;
 			if (Erlpack) {
-				message = Erlpack.unpack(this.zlibInflate.result);
+				parsed = Erlpack.unpack(this.zlibInflate.result as Buffer);
 			} else {
-				message = JSON.parse(String(this.zlibInflate.result));
+				parsed = JSON.parse(String(this.zlibInflate.result));
 			}
 		} catch (e) {
-			/**
-			 * @event BetterWs#error
-			 * @type {string}
-			 * @description Emitted upon parse errors of messages
-			 * @private
-			 */
 			this.emit("error", `Message: ${message} was not parseable`);
 			return;
 		}
-		/**
-		 * @event BetterWs#ws_message
-		 * @type {any}
-		 * @description Emitted upon successful parsing of a message with the parsed Message
-		 * @private
-		 */
-		this.emit("ws_message", message);
+		this.emit("ws_message", parsed);
 	}
 
 	/**
 	 * Called when the websocket connection closes for some reason
-	 * @param {number} code - websocket close code
-	 * @param {string} reason - reason of the close if any
+	 * @param code websocket close code
+	 * @param reason reason of the close if any
 	 */
-	onClose(code, reason) {
-		/**
-		 * @event BetterWs#ws_close
-		 * @type {void}
-		 * @param {number} code - websocket close code
-		 * @param {string} reason - websocket close reason
-		 * @private
-		 */
+	private onClose(code: number, reason: string) {
 		this.emit("ws_close", code, reason);
 	}
 
 	/**
 	 * Send a message to the discord gateway
-	 * @param {any} data - data to send
-	 * @returns {Promise<void>}
+	 * @param data data to send
 	 */
-	sendMessage(data) {
-		/**
-		 * @event BetterWs#debug_send
-		 * @type {any}
-		 * @description Used for debugging the messages sent to discord's gateway
-		 * @private
-		 */
+	public sendMessage(data: any): Promise<void> {
 		this.emit("debug_send", data);
 		return new Promise((res, rej) => {
 			let status = data.op === GATEWAY_OP_CODES.STATUS_UPDATE;
@@ -194,11 +177,10 @@ class BetterWs extends EventEmitter {
 
 	/**
 	 * Close the current connection
-	 * @param {number} code=1000 - websocket close code to use
-	 * @param {string} reason - reason of the disconnect
-	 * @returns {Promise<void>}
+	 * @param code websocket close code to use
+	 * @param reason reason of the disconnect
 	 */
-	close(code = 1000, reason = "") {
+	public close(code: number = 1000, reason: string = ""): Promise<void> {
 		return new Promise((res, rej) => {
 			this.ws.close(code, reason);
 			this.ws.once("close", () => {
@@ -208,8 +190,7 @@ class BetterWs extends EventEmitter {
 				return rej("Websocket not closed within 5 seconds");
 			}, 5 * 1000);
 		});
-
 	}
 }
 
-module.exports = BetterWs;
+export = BetterWs;
