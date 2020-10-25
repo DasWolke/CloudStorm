@@ -56,9 +56,11 @@ class DiscordConnector extends events_1.EventEmitter {
         });
     }
     async disconnect() {
-        return this.betterWs?.close(1000, "Disconnect from User") || undefined;
+        var _a;
+        return ((_a = this.betterWs) === null || _a === void 0 ? void 0 : _a.close(1000, "Disconnect from User")) || undefined;
     }
     messageAction(message) {
+        var _a;
         this.client.emit("rawReceive", message);
         if (message.s) {
             if (message.s > this.seq + 1) {
@@ -88,7 +90,7 @@ class DiscordConnector extends events_1.EventEmitter {
                 break;
             case Constants_1.GATEWAY_OP_CODES.RECONNECT:
                 this.reset();
-                this.betterWs?.close();
+                (_a = this.betterWs) === null || _a === void 0 ? void 0 : _a.close();
                 break;
             case Constants_1.GATEWAY_OP_CODES.INVALID_SESSION:
                 if (message.d && this.sessionId) {
@@ -113,6 +115,7 @@ class DiscordConnector extends events_1.EventEmitter {
         this.heartbeatInterval = null;
     }
     async identify(force) {
+        var _a;
         if (this.sessionId && !this.forceIdentify && !force) {
             return this.resume();
         }
@@ -131,16 +134,18 @@ class DiscordConnector extends events_1.EventEmitter {
             }
         };
         this.forceIdentify = false;
-        return this.betterWs?.sendMessage(data);
+        return (_a = this.betterWs) === null || _a === void 0 ? void 0 : _a.sendMessage(data);
     }
     async resume() {
-        return this.betterWs?.sendMessage({
+        var _a;
+        return (_a = this.betterWs) === null || _a === void 0 ? void 0 : _a.sendMessage({
             op: Constants_1.GATEWAY_OP_CODES.RESUME,
             d: { seq: this.seq, token: this.options.token, session_id: this.sessionId }
         });
     }
     heartbeat() {
-        this.betterWs?.sendMessage({ op: Constants_1.GATEWAY_OP_CODES.HEARTBEAT, d: this.seq });
+        var _a;
+        (_a = this.betterWs) === null || _a === void 0 ? void 0 : _a.sendMessage({ op: Constants_1.GATEWAY_OP_CODES.HEARTBEAT, d: this.seq });
     }
     handleDispatch(message) {
         switch (message.t) {
@@ -159,6 +164,7 @@ class DiscordConnector extends events_1.EventEmitter {
         }
     }
     handleWsClose(code, reason) {
+        var _a;
         let forceIdentify = false;
         let gracefulClose = false;
         this.status = "disconnected";
@@ -182,20 +188,23 @@ class DiscordConnector extends events_1.EventEmitter {
         }
         if (this.heartbeatInterval)
             clearInterval(this.heartbeatInterval);
-        this.betterWs?.removeAllListeners();
+        (_a = this.betterWs) === null || _a === void 0 ? void 0 : _a.removeAllListeners();
         this.emit("disconnect", code, reason, forceIdentify, gracefulClose);
     }
     async statusUpdate(data = {}) {
-        return this.betterWs?.sendMessage({ op: Constants_1.GATEWAY_OP_CODES.STATUS_UPDATE, d: this._checkPresenceData(data) });
+        var _a;
+        return (_a = this.betterWs) === null || _a === void 0 ? void 0 : _a.sendMessage({ op: Constants_1.GATEWAY_OP_CODES.STATUS_UPDATE, d: this._checkPresenceData(data) });
     }
     async voiceStateUpdate(data) {
+        var _a;
         if (!data) {
             return Promise.resolve();
         }
-        return this.betterWs?.sendMessage({ op: Constants_1.GATEWAY_OP_CODES.VOICE_STATE_UPDATE, d: this._checkVoiceStateUpdateData(data) });
+        return (_a = this.betterWs) === null || _a === void 0 ? void 0 : _a.sendMessage({ op: Constants_1.GATEWAY_OP_CODES.VOICE_STATE_UPDATE, d: this._checkVoiceStateUpdateData(data) });
     }
     async requestGuildMembers(data) {
-        return this.betterWs?.sendMessage({ op: Constants_1.GATEWAY_OP_CODES.REQUEST_GUILD_MEMBERS, d: this._checkRequestGuildMembersData(data) });
+        var _a;
+        return (_a = this.betterWs) === null || _a === void 0 ? void 0 : _a.sendMessage({ op: Constants_1.GATEWAY_OP_CODES.REQUEST_GUILD_MEMBERS, d: this._checkRequestGuildMembersData(data) });
     }
     _checkPresenceData(data) {
         data.status = data.status || "online";
