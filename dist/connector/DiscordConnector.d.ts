@@ -22,8 +22,8 @@ declare class DiscordConnector extends EventEmitter {
     forceIdentify: boolean;
     constructor(id: number, client: import("../Client"));
     emit<E extends keyof ConnectorEvents>(event: E, ...args: ConnectorEvents[E]): boolean;
-    once<E extends keyof ConnectorEvents>(event: E, listener: (...args: ConnectorEvents[E]) => any): any;
-    on<E extends keyof ConnectorEvents>(event: E, listener: (...args: ConnectorEvents[E]) => any): any;
+    once<E extends keyof ConnectorEvents>(event: E, listener: (...args: ConnectorEvents[E]) => any): this;
+    on<E extends keyof ConnectorEvents>(event: E, listener: (...args: ConnectorEvents[E]) => any): this;
     connect(): void;
     disconnect(): Promise<void>;
     private messageAction;

@@ -15,8 +15,8 @@ declare class Shard extends EventEmitter {
     connector: DiscordConnector;
     constructor(id: number, client: import("./Client"));
     emit<E extends keyof ShardEvents>(event: E, ...args: ShardEvents[E]): boolean;
-    once<E extends keyof ShardEvents>(event: E, listener: (...args: ShardEvents[E]) => any): any;
-    on<E extends keyof ShardEvents>(event: E, listener: (...args: ShardEvents[E]) => any): any;
+    once<E extends keyof ShardEvents>(event: E, listener: (...args: ShardEvents[E]) => any): this;
+    on<E extends keyof ShardEvents>(event: E, listener: (...args: ShardEvents[E]) => any): this;
     connect(): void;
     disconnect(): Promise<void>;
     statusUpdate(data: import("./Types").IPresence): Promise<void>;

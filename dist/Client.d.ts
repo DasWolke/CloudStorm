@@ -27,8 +27,8 @@ declare class Client extends EventEmitter {
     private _restClient;
     constructor(token: string, options?: import("./Types").IClientOptions);
     emit<E extends keyof ClientEvents>(event: E, ...args: ClientEvents[E]): boolean;
-    once<E extends keyof ClientEvents>(event: E, listener: (...args: ClientEvents[E]) => any): any;
-    on<E extends keyof ClientEvents>(event: E, listener: (...args: ClientEvents[E]) => any): any;
+    once<E extends keyof ClientEvents>(event: E, listener: (...args: ClientEvents[E]) => any): this;
+    on<E extends keyof ClientEvents>(event: E, listener: (...args: ClientEvents[E]) => any): this;
     static get Constants(): {
         GATEWAY_OP_CODES: {
             DISPATCH: number;

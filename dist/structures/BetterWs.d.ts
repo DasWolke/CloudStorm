@@ -19,8 +19,8 @@ declare class BetterWs extends EventEmitter {
     options: WebSocket.ClientOptions;
     constructor(address: string, options?: import("ws").ClientOptions);
     emit<E extends keyof BWSEvents>(event: E, ...args: BWSEvents[E]): boolean;
-    once<E extends keyof BWSEvents>(event: E, listener: (...args: BWSEvents[E]) => any): any;
-    on<E extends keyof BWSEvents>(event: E, listener: (...args: BWSEvents[E]) => any): any;
+    once<E extends keyof BWSEvents>(event: E, listener: (...args: BWSEvents[E]) => any): this;
+    on<E extends keyof BWSEvents>(event: E, listener: (...args: BWSEvents[E]) => any): this;
     get rawWs(): WebSocket;
     private bindWs;
     recreateWs(address: string, options?: import("ws").ClientOptions): void;

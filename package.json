@@ -2,11 +2,11 @@
   "name": "cloudstorm",
   "version": "0.2.0",
   "description": "Minimalistic Discord Gateway library",
-  "main": "./dist/src/Client.js",
+  "main": "./dist/Client.js",
   "engines": {
     "node": ">=8.0.0"
   },
-  "types": "./dist/src/Client.d.ts",
+  "types": "./dist/Client.d.ts",
   "scripts": {
     "build:docs": "node_modules/.bin/docma -c docma.config.json",
     "build:src": "tsc -p ."
@@ -21,7 +21,11 @@
     "zlib-sync": "^0.1.7"
   },
   "devDependencies": {
-    "eslint": "^7.12.0"
+    "@typescript-eslint/eslint-plugin": "^4.5.0",
+    "@typescript-eslint/parser": "^4.5.0",
+    "docma": "3.2.2",
+    "eslint": "^7.12.0",
+    "typescript": "~4.0.3"
   },
   "optionalDependencies": {
     "amqp": "0.2.7",

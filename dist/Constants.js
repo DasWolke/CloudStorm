@@ -1,5 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
+exports.GATEWAY_VERSION = exports.GATEWAY_OP_CODES = void 0;
 exports.GATEWAY_OP_CODES = {
     DISPATCH: 0,
     HEARTBEAT: 1,
