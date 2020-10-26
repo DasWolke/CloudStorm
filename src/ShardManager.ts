@@ -65,21 +65,18 @@ class ShardManager {
 	private _connectShard(data: { action: string, shard: Shard }) {
 		const { action, shard } = data;
 		this.client.emit("debug", `${action === "connect" ? "Connecting" : "Identifying"} Shard ${shard.id} Status: ${shard.connector.status} Ready: ${shard.ready}`);
-		if (this.lastConnectionAttempt && (this.lastConnectionAttempt <= Date.now() - 6000)) {
-			switch (action) {
-			case "identify":
+		if ((this.lastConnectionAttempt || 0) <= Date.now() - 6000) {
+
+			if (action === "identify") {
 				this.lastConnectionAttempt = Date.now();
 				this.client.emit("debug", `Identifying shard ${shard.id}`);
 				shard.connector.identify(true);
-				break;
-			case "connect":
-			default:
+			} else {
 				if (shard.connector.status !== "connecting" && !shard.ready) {
 					this.lastConnectionAttempt = Date.now();
 					this.client.emit("debug", `Connecting shard ${shard.id}`);
 					shard.connect();
 				}
-				break;
 			}
 		}
 	}

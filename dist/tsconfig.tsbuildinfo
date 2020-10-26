@@ -572,12 +572,12 @@
         "affectsGlobalScope": false
       },
       "../src/shard.ts": {
-        "version": "12fbaa9c9ba697df8207b6fc51cd854a48e1e6de6235948693e20a4900167ed9",
+        "version": "a439e5557a002029478dff85c73eccc3bc82ca7f61dff17a58ce617add67faa3",
         "signature": "46d0fcc34e6620e5a3721550bd8432858711e3b74a7e8ddbb6ec66dc5bec8195",
         "affectsGlobalScope": false
       },
       "../src/shardmanager.ts": {
-        "version": "2144d659863d5fa9c7a168ae2964c84fb9bb9e35465a23ab008f111e2fdd91be",
+        "version": "79d00140318a7128b3afbaea9c3594e7ec955064d9a16ebdf6ddc28ca158d00f",
         "signature": "c6847cc4e21750b8b339989d9e1f6ed478275ea69b3b593cbf60d208660ae02a",
         "affectsGlobalScope": false
       },

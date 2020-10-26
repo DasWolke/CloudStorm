@@ -37,7 +37,7 @@ class Shard extends EventEmitter {
 		this.ready = false;
 		this.connector = new DiscordConnector(id, client);
 		this.connector.on("event", (event) => {
-			const newEvent: import("./Types").IGatewayMessage = { shard_id: this.id, ...event };
+			const newEvent: import("./Types").IGatewayMessage = Object.assign(event, { shard_id: this.id });
 			this.client.emit("event", newEvent);
 			switch (event.op) {
 			case OP_CODES.DISPATCH:
