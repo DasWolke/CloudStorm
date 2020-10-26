@@ -572,7 +572,7 @@
         "affectsGlobalScope": false
       },
       "../src/shard.ts": {
-        "version": "a439e5557a002029478dff85c73eccc3bc82ca7f61dff17a58ce617add67faa3",
+        "version": "27f6da5b0bb6bcdb6d7a54f27e1054a9ac1de1b59c9004a6359cada363f70ea8",
         "signature": "46d0fcc34e6620e5a3721550bd8432858711e3b74a7e8ddbb6ec66dc5bec8195",
         "affectsGlobalScope": false
       },
