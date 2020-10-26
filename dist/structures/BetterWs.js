@@ -87,7 +87,7 @@ class BetterWs extends events_1.EventEmitter {
     sendMessage(data) {
         this.emit("debug_send", data);
         return new Promise((res, rej) => {
-            let status = data.op === Constants_1.GATEWAY_OP_CODES.STATUS_UPDATE;
+            const status = data.op === Constants_1.GATEWAY_OP_CODES.STATUS_UPDATE;
             try {
                 if (Erlpack) {
                     data = Erlpack.pack(data);
@@ -99,7 +99,7 @@ class BetterWs extends events_1.EventEmitter {
             catch (e) {
                 return rej(e);
             }
-            let sendMsg = () => {
+            const sendMsg = () => {
                 this.wsBucket.queue(() => {
                     this.ws.send(data, {}, (e) => {
                         if (e) {

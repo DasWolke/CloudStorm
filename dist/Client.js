@@ -2,7 +2,7 @@
 var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
-let version = require("../package.json").version;
+const version = require("../package.json").version;
 const events_1 = require("events");
 let Erlpack;
 try {
@@ -47,12 +47,12 @@ class Client extends events_1.EventEmitter {
         return Constants_1.default;
     }
     async connect() {
-        let gatewayUrl = await this.getGateway();
+        const gatewayUrl = await this.getGateway();
         this._updateEndpoint(gatewayUrl);
         this.shardManager.spawn();
     }
     async getGateway() {
-        let gatewayData = await this._restClient.bot.getGateway();
+        const gatewayData = await this._restClient.bot.getGateway();
         return gatewayData.url;
     }
     async getGatewayBot() {

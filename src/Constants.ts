@@ -13,6 +13,6 @@ export const GATEWAY_OP_CODES = {
 	INVALID_SESSION: 9,
 	HELLO: 10,
 	HEARTBEAT_ACK: 11
-}
-export const GATEWAY_VERSION = 8
-export default { GATEWAY_OP_CODES, GATEWAY_VERSION }
+};
+export const GATEWAY_VERSION = 8;
+export default { GATEWAY_OP_CODES, GATEWAY_VERSION };

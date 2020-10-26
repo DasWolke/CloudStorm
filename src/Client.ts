@@ -1,6 +1,6 @@
 "use strict";
 
-let version = require("../package.json").version;
+const version = require("../package.json").version;
 import { EventEmitter } from "events";
 let Erlpack: typeof import("erlpack");
 try {
@@ -81,7 +81,7 @@ class Client extends EventEmitter {
 	 * @returns This function returns a promise which is solely used for awaiting the getGateway() method's return value
 	 */
 	public async connect(): Promise<void> {
-		let gatewayUrl = await this.getGateway();
+		const gatewayUrl = await this.getGateway();
 		this._updateEndpoint(gatewayUrl);
 		this.shardManager.spawn();
 	}
@@ -91,7 +91,7 @@ class Client extends EventEmitter {
 	 * @returns String url with the Gateway Endpoint to connect to
 	 */
 	public async getGateway(): Promise<string> {
-		let gatewayData = await this._restClient.bot.getGateway();
+		const gatewayData = await this._restClient.bot.getGateway();
 		return gatewayData.url;
 	}
 

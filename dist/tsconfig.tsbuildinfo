@@ -207,7 +207,7 @@
         "affectsGlobalScope": true
       },
       "../src/constants.ts": {
-        "version": "c8cc6b61ae9951a19029c750a3899b11f13fd2e10629793281d744a79f0cf5a3",
+        "version": "52814140a978d1987674f51003cfd4dff7b9ba09d6bf0a5b9d0a36d56f4df814",
         "signature": "b2d95693ac7cd76af1084ed4c90fdcaa1f6a9abd28d193be129b7d73fd94c709",
         "affectsGlobalScope": false
       },
@@ -542,7 +542,7 @@
         "affectsGlobalScope": false
       },
       "../src/structures/ratelimitbucket.ts": {
-        "version": "cf74d14a0ed29ee0cd03076155ae323cf8240d507462c4d1d33183f2452e1bcd",
+        "version": "74b5dca38abb3e36fa56cc56123b9a8dc40134332d4b6a6c7d5e3c4c74ae713e",
         "signature": "5f3c0fff298b8112032ac77b072bfd1aba3e287ef66264ec9b87e4e2868a0978",
         "affectsGlobalScope": false
       },
@@ -557,7 +557,7 @@
         "affectsGlobalScope": false
       },
       "../src/structures/betterws.ts": {
-        "version": "4f7991570c687223c765d0be97e5d996f3db476219059e058af70fe44baee1a6",
+        "version": "2e21d452449dc2bb468ea77efaaa4122d2cf06df697ed2b63b50f767d8b8f51a",
         "signature": "548f39d876e08b5559f5b31c04c27cd604113e8ef5ab13723fa4dbbd9e2bdd44",
         "affectsGlobalScope": false
       },
@@ -567,7 +567,7 @@
         "affectsGlobalScope": false
       },
       "../src/connector/discordconnector.ts": {
-        "version": "9e170ab57c2c2a698db589a7843687981cae1be1474436fcbfc3788d59a186e6",
+        "version": "6459b30d3ed8eef7f57ba9ee64d31a77f861fe393c1d23d3fb1f539884a6b4f1",
         "signature": "2b14c5e99ef8e74ad7124de891201004cf99283067e579692e43b0c671f07fa6",
         "affectsGlobalScope": false
       },
@@ -577,12 +577,12 @@
         "affectsGlobalScope": false
       },
       "../src/shardmanager.ts": {
-        "version": "c229abcfd4dd322a881c675a459499d01734672f0b9f108dda8a483dd116d33d",
+        "version": "2144d659863d5fa9c7a168ae2964c84fb9bb9e35465a23ab008f111e2fdd91be",
         "signature": "c6847cc4e21750b8b339989d9e1f6ed478275ea69b3b593cbf60d208660ae02a",
         "affectsGlobalScope": false
       },
       "../src/client.ts": {
-        "version": "37e9a183a303715aaf5b1595ae185ccfc6161b8b79bc32dc69c73f3861cd4b78",
+        "version": "2c230b46f85eaf76f88a89463d6e015e8a320e5dbfe4dfc0d8c01b2d7cedf7f5",
         "signature": "155ef76b4f74a87d04de6855880d94af92566acce539cfd42ee5f87e4b7255c0",
         "affectsGlobalScope": false
       }

@@ -119,7 +119,7 @@ class DiscordConnector extends events_1.EventEmitter {
         if (this.sessionId && !this.forceIdentify && !force) {
             return this.resume();
         }
-        let data = {
+        const data = {
             op: Constants_1.GATEWAY_OP_CODES.IDENTIFY, d: {
                 token: this.options.token,
                 properties: {

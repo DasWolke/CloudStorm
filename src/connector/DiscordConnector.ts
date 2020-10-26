@@ -167,7 +167,7 @@ class DiscordConnector extends EventEmitter {
 		if (this.sessionId && !this.forceIdentify && !force) {
 			return this.resume();
 		}
-		let data = {
+		const data = {
 			op: OP.IDENTIFY, d: {
 				token: this.options.token,
 				properties: {

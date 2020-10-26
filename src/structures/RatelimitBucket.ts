@@ -15,7 +15,7 @@ class RatelimitBucket {
 	 * @param limit Number of functions that may be executed during the timeframe set in limitReset
 	 * @param limitReset Timeframe in milliseconds until the ratelimit resets
 	 */
-	public constructor(limit: number = 5, limitReset: number = 5000) {
+	public constructor(limit = 5, limitReset = 5000) {
 		this.fnQueue = [];
 		this.limit = limit;
 		this.remaining = limit;
@@ -30,7 +30,7 @@ class RatelimitBucket {
 	 */
 	public queue(fn: (...args: Array<any>) => any): Promise<any> {
 		return new Promise((res, rej) => {
-			let wrapFn = () => {
+			const wrapFn = () => {
 				this.remaining--;
 				if (!this.resetTimeout) {
 					this.resetTimeout = setTimeout(() => this.resetRemaining(), this.limitReset);
@@ -59,7 +59,7 @@ class RatelimitBucket {
 	 */
 	private checkQueue() {
 		if (this.fnQueue.length > 0 && this.remaining !== 0) {
-			let queuedFunc = this.fnQueue.splice(0, 1)[0];
+			const queuedFunc = this.fnQueue.splice(0, 1)[0];
 			queuedFunc.callback();
 		}
 	}

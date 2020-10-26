@@ -145,7 +145,7 @@ class BetterWs extends EventEmitter {
 	public sendMessage(data: any): Promise<void> {
 		this.emit("debug_send", data);
 		return new Promise((res, rej) => {
-			let status = data.op === GATEWAY_OP_CODES.STATUS_UPDATE;
+			const status = data.op === GATEWAY_OP_CODES.STATUS_UPDATE;
 			try {
 				if (Erlpack) {
 					data = Erlpack.pack(data);
@@ -155,7 +155,7 @@ class BetterWs extends EventEmitter {
 			} catch (e) {
 				return rej(e);
 			}
-			let sendMsg = () => {
+			const sendMsg = () => {
 				// The promise from wsBucket is ignored, since the method passed to it does not return a promise
 				this.wsBucket.queue(() => {
 					this.ws.send(data, {}, (e) => {
@@ -180,7 +180,7 @@ class BetterWs extends EventEmitter {
 	 * @param code websocket close code to use
 	 * @param reason reason of the disconnect
 	 */
-	public close(code: number = 1000, reason: string = ""): Promise<void> {
+	public close(code = 1000, reason = ""): Promise<void> {
 		return new Promise((res, rej) => {
 			this.ws.close(code, reason);
 			this.ws.once("close", () => {

@@ -51,7 +51,7 @@ class ShardManager {
 	 */
 	public disconnect() {
 		for (const shardKey in this.shards) {
-			if (this.shards.hasOwnProperty(shardKey)) {
+			if (this.shards[shardKey]) {
 				const shard = this.shards[shardKey];
 				shard.disconnect();
 			}
@@ -89,7 +89,7 @@ class ShardManager {
 	 */
 	private _checkQueue() {
 		this.client.emit("debug", `Checking queue Length: ${this.connectQueue.length} LastAttempt: ${this.lastConnectionAttempt} Current Time: ${Date.now()}`);
-		if (this.connectQueue.length > 0 && (this.lastConnectionAttempt && (this.lastConnectionAttempt <= Date.now() - 6000))) {
+		if (this.connectQueue.length > 0 && ((this.lastConnectionAttempt || 0) <= Date.now() - 6000)) {
 			const toConnect = this.connectQueue.splice(0, 1);
 			for (const shard of toConnect) {
 				this._connectShard(shard);
@@ -134,8 +134,8 @@ class ShardManager {
 	 * Checks if all shards are ready
 	 */
 	private _checkReady() {
-		for (let shardId in this.shards) {
-			if (this.shards.hasOwnProperty(shardId)) {
+		for (const shardId in this.shards) {
+			if (this.shards[shardId]) {
 				if (!this.shards[shardId].ready) {
 					return;
 				}
@@ -148,8 +148,8 @@ class ShardManager {
 	 * Checks if all shards are disconnected
 	 */
 	private _checkDisconnect() {
-		for (let shardId in this.shards) {
-			if (this.shards.hasOwnProperty(shardId)) {
+		for (const shardId in this.shards) {
+			if (this.shards[shardId]) {
 				if (this.shards[shardId].connector.status !== "disconnected") {
 					return;
 				}
@@ -163,10 +163,10 @@ class ShardManager {
 	 * @param data payload to send
 	 */
 	public async statusUpdate(data: import("./Types").IPresence = {}) {
-		let shardPromises: Array<Promise<void>> = [];
-		for (let shardKey in this.shards) {
-			if (this.shards.hasOwnProperty(shardKey)) {
-				let shard = this.shards[shardKey];
+		const shardPromises: Array<Promise<void>> = [];
+		for (const shardKey in this.shards) {
+			if (this.shards[shardKey]) {
+				const shard = this.shards[shardKey];
 				if (shard.ready) {
 					shardPromises.push(shard.statusUpdate(data));
 				}
@@ -182,7 +182,7 @@ class ShardManager {
 	 */
 	public shardStatusUpdate(shardId: number, data: import("./Types").IPresence = {}): Promise<void> {
 		return new Promise((res, rej) => {
-			let shard = this.shards[shardId];
+			const shard = this.shards[shardId];
 			if (!shard) {
 				rej(new Error(`Shard ${shardId} does not exist`));
 			}
@@ -202,7 +202,7 @@ class ShardManager {
 	 */
 	public voiceStateUpdate(shardId: number, data: import("./Types").IVoiceStateUpdate): Promise<void> {
 		return new Promise((res, rej) => {
-			let shard = this.shards[shardId];
+			const shard = this.shards[shardId];
 			if (!shard) {
 				rej(new Error(`Shard ${shardId} does not exist`));
 			}
@@ -222,7 +222,7 @@ class ShardManager {
 	 */
 	public requestGuildMembers(shardId: number, data: import("./Types").IRequestGuildMembers): Promise<void> {
 		return new Promise((res, rej) => {
-			let shard = this.shards[shardId];
+			const shard = this.shards[shardId];
 			if (!shard) {
 				rej(new Error(`Shard ${shardId} does not exist`));
 			}
