@@ -37,8 +37,7 @@ class Shard extends EventEmitter {
 		this.ready = false;
 		this.connector = new DiscordConnector(id, client);
 		this.connector.on("event", (event) => {
-			// Why is this a 3D array? The data is being emitted as a raw message...
-			const newEvent: import("./Types").IGatewayMessage = Object.assign(event[0][0], { shard_id: this.id });
+			const newEvent: import("./Types").IGatewayMessage = Object.assign(event, { shard_id: this.id });
 			this.client.emit("event", newEvent);
 			switch (event.op) {
 			case OP_CODES.DISPATCH:
@@ -67,7 +66,7 @@ class Shard extends EventEmitter {
 	}
 
 	public emit<E extends keyof ShardEvents>(event: E, ...args: ShardEvents[E]) {
-		return super.emit(event, args);
+		return super.emit(event, ...args);
 	}
 	public once<E extends keyof ShardEvents>(event: E, listener: (...args: ShardEvents[E]) => any) {
 		// @ts-ignore SHUT UP!!!

@@ -22,7 +22,7 @@ class DiscordConnector extends events_1.EventEmitter {
         this.forceIdentify = false;
     }
     emit(event, ...args) {
-        return super.emit(event, args);
+        return super.emit(event, ...args);
     }
     once(event, listener) {
         return super.once(event, listener);

@@ -45,7 +45,7 @@ class BetterWs extends EventEmitter {
 	}
 
 	public emit<E extends keyof BWSEvents>(event: E, ...args: BWSEvents[E]) {
-		return super.emit(event, args);
+		return super.emit(event, ...args);
 	}
 	public once<E extends keyof BWSEvents>(event: E, listener: (...args: BWSEvents[E]) => any) {
 		// @ts-ignore SHUT UP!!!

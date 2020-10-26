@@ -14,7 +14,7 @@ class Shard extends events_1.EventEmitter {
         this.ready = false;
         this.connector = new DiscordConnector_1.default(id, client);
         this.connector.on("event", (event) => {
-            const newEvent = Object.assign(event[0][0], { shard_id: this.id });
+            const newEvent = Object.assign(event, { shard_id: this.id });
             this.client.emit("event", newEvent);
             switch (event.op) {
                 case Constants_1.GATEWAY_OP_CODES.DISPATCH:
@@ -42,7 +42,7 @@ class Shard extends events_1.EventEmitter {
         });
     }
     emit(event, ...args) {
-        return super.emit(event, args);
+        return super.emit(event, ...args);
     }
     once(event, listener) {
         return super.once(event, listener);

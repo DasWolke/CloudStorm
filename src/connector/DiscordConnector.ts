@@ -52,7 +52,7 @@ class DiscordConnector extends EventEmitter {
 	}
 
 	public emit<E extends keyof ConnectorEvents>(event: E, ...args: ConnectorEvents[E]) {
-		return super.emit(event, args);
+		return super.emit(event, ...args);
 	}
 	public once<E extends keyof ConnectorEvents>(event: E, listener: (...args: ConnectorEvents[E]) => any) {
 		// @ts-ignore SHUT UP!!!

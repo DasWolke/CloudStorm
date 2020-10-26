@@ -61,7 +61,7 @@ class Client extends EventEmitter {
 	}
 
 	public emit<E extends keyof ClientEvents>(event: E, ...args: ClientEvents[E]) {
-		return super.emit(event, args);
+		return super.emit(event, ...args);
 	}
 	public once<E extends keyof ClientEvents>(event: E, listener: (...args: ClientEvents[E]) => any) {
 		// @ts-ignore SHUT UP!!!

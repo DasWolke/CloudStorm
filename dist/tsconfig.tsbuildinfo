@@ -557,7 +557,7 @@
         "affectsGlobalScope": false
       },
       "../src/structures/betterws.ts": {
-        "version": "2e21d452449dc2bb468ea77efaaa4122d2cf06df697ed2b63b50f767d8b8f51a",
+        "version": "8843a1dca9cd66cfc28cb739463318b690b346df705ceedce70248f124a767ae",
         "signature": "548f39d876e08b5559f5b31c04c27cd604113e8ef5ab13723fa4dbbd9e2bdd44",
         "affectsGlobalScope": false
       },
@@ -567,12 +567,12 @@
         "affectsGlobalScope": false
       },
       "../src/connector/discordconnector.ts": {
-        "version": "6459b30d3ed8eef7f57ba9ee64d31a77f861fe393c1d23d3fb1f539884a6b4f1",
+        "version": "9bf29e3e585da889002d7ad3c84f73d462fff9637065540a6968dd0fc532a7d6",
         "signature": "2b14c5e99ef8e74ad7124de891201004cf99283067e579692e43b0c671f07fa6",
         "affectsGlobalScope": false
       },
       "../src/shard.ts": {
-        "version": "27f6da5b0bb6bcdb6d7a54f27e1054a9ac1de1b59c9004a6359cada363f70ea8",
+        "version": "a35d1da455944044f4e70efe930769d820781724e811f5d8abc8ab7e7cf6669c",
         "signature": "46d0fcc34e6620e5a3721550bd8432858711e3b74a7e8ddbb6ec66dc5bec8195",
         "affectsGlobalScope": false
       },
@@ -582,7 +582,7 @@
         "affectsGlobalScope": false
       },
       "../src/client.ts": {
-        "version": "2c230b46f85eaf76f88a89463d6e015e8a320e5dbfe4dfc0d8c01b2d7cedf7f5",
+        "version": "be48e545ec3d6adc80d733677f3f8baf3fbd7cb7ff27a5c8cf20c49fcacbfbc0",
         "signature": "155ef76b4f74a87d04de6855880d94af92566acce539cfd42ee5f87e4b7255c0",
         "affectsGlobalScope": false
       }

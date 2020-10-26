@@ -35,7 +35,7 @@ class Client extends events_1.EventEmitter {
         this._restClient = new snowtransfer_1.default(token);
     }
     emit(event, ...args) {
-        return super.emit(event, args);
+        return super.emit(event, ...args);
     }
     once(event, listener) {
         return super.once(event, listener);
