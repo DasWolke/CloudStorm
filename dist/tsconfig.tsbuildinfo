@@ -567,8 +567,8 @@
         "affectsGlobalScope": false
       },
       "../src/connector/discordconnector.ts": {
-        "version": "9bf29e3e585da889002d7ad3c84f73d462fff9637065540a6968dd0fc532a7d6",
-        "signature": "2b14c5e99ef8e74ad7124de891201004cf99283067e579692e43b0c671f07fa6",
+        "version": "93b6d9b7bf34f8b214e35c4eeb34191dae92f6472a04389424efb41e12298fd7",
+        "signature": "3fe0bead2fa7e95c80a3a34bcf250c49f4e19bfc50916fa3bba978db974df303",
         "affectsGlobalScope": false
       },
       "../src/shard.ts": {
@@ -577,7 +577,7 @@
         "affectsGlobalScope": false
       },
       "../src/shardmanager.ts": {
-        "version": "79d00140318a7128b3afbaea9c3594e7ec955064d9a16ebdf6ddc28ca158d00f",
+        "version": "4294c05f2be75c0ad643226e3ecaeedc4c4de8fd9ffc04ca6c231fb644db6d43",
         "signature": "c6847cc4e21750b8b339989d9e1f6ed478275ea69b3b593cbf60d208660ae02a",
         "affectsGlobalScope": false
       },

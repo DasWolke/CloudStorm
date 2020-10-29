@@ -85,7 +85,7 @@ class ShardManager {
 	 * Check if there are shards that are not connected yet and connect them if over 6 seconds have passed since the last attempt
 	 */
 	private _checkQueue() {
-		this.client.emit("debug", `Checking queue Length: ${this.connectQueue.length} LastAttempt: ${this.lastConnectionAttempt} Current Time: ${Date.now()}`);
+		// this.client.emit("debug", `Checking queue Length: ${this.connectQueue.length} LastAttempt: ${this.lastConnectionAttempt} Current Time: ${Date.now()}`);
 		if (this.connectQueue.length > 0 && ((this.lastConnectionAttempt || 0) <= Date.now() - 6000)) {
 			const toConnect = this.connectQueue.splice(0, 1);
 			for (const shard of toConnect) {

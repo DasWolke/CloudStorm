@@ -24,12 +24,14 @@ class DiscordConnector extends EventEmitter {
 	public options: import("../Client")["options"];
 	public reconnect: boolean;
 	public betterWs: BetterWs | null;
-	public heartbeatInterval: NodeJS.Timeout | null;
+	public heartbeatTimeout: NodeJS.Timeout | null;
+	public heartbeatInterval: number;
 	public _trace: string | null;
 	public seq: number;
 	public status: string;
 	public sessionId: string | null;
 	public forceIdentify: boolean;
+	public lastACKAt: number;
 
 	/**
 	 * Create a new Discord Connector
@@ -43,12 +45,14 @@ class DiscordConnector extends EventEmitter {
 		this.options = client.options;
 		this.reconnect = this.options.reconnect || true;
 		this.betterWs = null;
-		this.heartbeatInterval = null;
+		this.heartbeatTimeout = null;
+		this.heartbeatInterval = 0;
 		this._trace = null;
 		this.seq = 0;
 		this.status = "init";
 		this.sessionId = null;
 		this.forceIdentify = false;
+		this.lastACKAt = 0;
 	}
 
 	public emit<E extends keyof ConnectorEvents>(event: E, ...args: ConnectorEvents[E]) {
@@ -95,14 +99,14 @@ class DiscordConnector extends EventEmitter {
 	 * Close the websocket connection and disconnect
 	 */
 	public async disconnect(): Promise<void> {
-		return this.betterWs?.close(1000, "Disconnect from User") || undefined;
+		return this.betterWs?.close(1000, "Disconnect from User");
 	}
 
 	/**
 	 * Called with a parsed Websocket message to execute further actions
 	 * @param message message that was received
 	 */
-	private messageAction(message: import("../Types").IGatewayMessage) {
+	private async messageAction(message: import("../Types").IGatewayMessage) {
 		this.client.emit("rawReceive", message);
 		if (message.s) {
 			if (message.s > this.seq + 1) {
@@ -118,9 +122,15 @@ class DiscordConnector extends EventEmitter {
 			break;
 		case OP.HELLO:
 			this.heartbeat();
-			this.heartbeatInterval = setInterval(() => {
-				this.heartbeat();
-			}, message.d.heartbeat_interval - 5000);
+			this.heartbeatInterval = message.d.heartbeat_interval - 5000;
+			this.heartbeatTimeout = setInterval(async () => {
+				if (this.lastACKAt <= Date.now() - (this.heartbeatInterval * 2)) {
+					this.client.emit("debug", `Shard ${this.id} has not received a heartbeat ACK in ${this.heartbeatInterval * 2}ms.`);
+					if (this.options.reconnect) this._reconnect();
+				} else {
+					this.heartbeat();
+				}
+			}, this.heartbeatInterval);
 			this._trace = message.d._trace;
 			this.identify();
 			this.client.emit("debug", `Shard ${this.id} received HELLO`);
@@ -129,10 +139,11 @@ class DiscordConnector extends EventEmitter {
 			this.heartbeat();
 			break;
 		case OP.HEARTBEAT_ACK:
+			this.lastACKAt = Date.now();
 			break;
 		case OP.RECONNECT:
-			this.reset();
-			this.betterWs?.close();
+			this.client.emit("debug", `Gateway asked shard ${this.id} to reconnect`);
+			if (this.options.reconnect) this._reconnect();
 			break;
 		case OP.INVALID_SESSION:
 			if (message.d && this.sessionId) {
@@ -148,15 +159,23 @@ class DiscordConnector extends EventEmitter {
 		}
 	}
 
+	private async _reconnect() {
+		this.reset();
+		await this.betterWs?.close(1012, "reconnecting");
+		this.connect();
+	}
+
 	/**
 	 * Reset this connector
 	 */
 	private reset() {
 		this.sessionId = null;
 		this.seq = 0;
+		this.lastACKAt = 0;
 		this._trace = null;
-		if (this.heartbeatInterval) clearInterval(this.heartbeatInterval);
-		this.heartbeatInterval = null;
+		if (this.heartbeatTimeout) clearInterval(this.heartbeatTimeout);
+		this.heartbeatTimeout = null;
+		this.heartbeatInterval = 0;
 	}
 
 	/**
@@ -168,7 +187,8 @@ class DiscordConnector extends EventEmitter {
 			return this.resume();
 		}
 		const data = {
-			op: OP.IDENTIFY, d: {
+			op: OP.IDENTIFY,
+			d: {
 				token: this.options.token,
 				properties: {
 					os: process.platform,

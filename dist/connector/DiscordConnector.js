@@ -14,12 +14,14 @@ class DiscordConnector extends events_1.EventEmitter {
         this.options = client.options;
         this.reconnect = this.options.reconnect || true;
         this.betterWs = null;
-        this.heartbeatInterval = null;
+        this.heartbeatTimeout = null;
+        this.heartbeatInterval = 0;
         this._trace = null;
         this.seq = 0;
         this.status = "init";
         this.sessionId = null;
         this.forceIdentify = false;
+        this.lastACKAt = 0;
     }
     emit(event, ...args) {
         return super.emit(event, ...args);
@@ -57,10 +59,9 @@ class DiscordConnector extends events_1.EventEmitter {
     }
     async disconnect() {
         var _a;
-        return ((_a = this.betterWs) === null || _a === void 0 ? void 0 : _a.close(1000, "Disconnect from User")) || undefined;
+        return (_a = this.betterWs) === null || _a === void 0 ? void 0 : _a.close(1000, "Disconnect from User");
     }
-    messageAction(message) {
-        var _a;
+    async messageAction(message) {
         this.client.emit("rawReceive", message);
         if (message.s) {
             if (message.s > this.seq + 1) {
@@ -76,9 +77,17 @@ class DiscordConnector extends events_1.EventEmitter {
                 break;
             case Constants_1.GATEWAY_OP_CODES.HELLO:
                 this.heartbeat();
-                this.heartbeatInterval = setInterval(() => {
-                    this.heartbeat();
-                }, message.d.heartbeat_interval - 5000);
+                this.heartbeatInterval = message.d.heartbeat_interval - 5000;
+                this.heartbeatTimeout = setInterval(async () => {
+                    if (this.lastACKAt <= Date.now() - (this.heartbeatInterval * 2)) {
+                        this.client.emit("debug", `Shard ${this.id} has not received a heartbeat ACK in ${this.heartbeatInterval * 2}ms.`);
+                        if (this.options.reconnect)
+                            this._reconnect();
+                    }
+                    else {
+                        this.heartbeat();
+                    }
+                }, this.heartbeatInterval);
                 this._trace = message.d._trace;
                 this.identify();
                 this.client.emit("debug", `Shard ${this.id} received HELLO`);
@@ -87,10 +96,12 @@ class DiscordConnector extends events_1.EventEmitter {
                 this.heartbeat();
                 break;
             case Constants_1.GATEWAY_OP_CODES.HEARTBEAT_ACK:
+                this.lastACKAt = Date.now();
                 break;
             case Constants_1.GATEWAY_OP_CODES.RECONNECT:
-                this.reset();
-                (_a = this.betterWs) === null || _a === void 0 ? void 0 : _a.close();
+                this.client.emit("debug", `Gateway asked shard ${this.id} to reconnect`);
+                if (this.options.reconnect)
+                    this._reconnect();
                 break;
             case Constants_1.GATEWAY_OP_CODES.INVALID_SESSION:
                 if (message.d && this.sessionId) {
@@ -106,13 +117,21 @@ class DiscordConnector extends events_1.EventEmitter {
                 this.emit("event", message);
         }
     }
+    async _reconnect() {
+        var _a;
+        this.reset();
+        await ((_a = this.betterWs) === null || _a === void 0 ? void 0 : _a.close(1012, "reconnecting"));
+        this.connect();
+    }
     reset() {
         this.sessionId = null;
         this.seq = 0;
+        this.lastACKAt = 0;
         this._trace = null;
-        if (this.heartbeatInterval)
-            clearInterval(this.heartbeatInterval);
-        this.heartbeatInterval = null;
+        if (this.heartbeatTimeout)
+            clearInterval(this.heartbeatTimeout);
+        this.heartbeatTimeout = null;
+        this.heartbeatInterval = 0;
     }
     async identify(force) {
         var _a;
@@ -120,7 +139,8 @@ class DiscordConnector extends events_1.EventEmitter {
             return this.resume();
         }
         const data = {
-            op: Constants_1.GATEWAY_OP_CODES.IDENTIFY, d: {
+            op: Constants_1.GATEWAY_OP_CODES.IDENTIFY,
+            d: {
                 token: this.options.token,
                 properties: {
                     os: process.platform,

@@ -14,12 +14,14 @@ declare class DiscordConnector extends EventEmitter {
     options: import("../Client")["options"];
     reconnect: boolean;
     betterWs: BetterWs | null;
-    heartbeatInterval: NodeJS.Timeout | null;
+    heartbeatTimeout: NodeJS.Timeout | null;
+    heartbeatInterval: number;
     _trace: string | null;
     seq: number;
     status: string;
     sessionId: string | null;
     forceIdentify: boolean;
+    lastACKAt: number;
     constructor(id: number, client: import("../Client"));
     emit<E extends keyof ConnectorEvents>(event: E, ...args: ConnectorEvents[E]): boolean;
     once<E extends keyof ConnectorEvents>(event: E, listener: (...args: ConnectorEvents[E]) => any): this;
@@ -27,6 +29,7 @@ declare class DiscordConnector extends EventEmitter {
     connect(): void;
     disconnect(): Promise<void>;
     private messageAction;
+    private _reconnect;
     private reset;
     identify(force?: boolean): Promise<void>;
     private resume;

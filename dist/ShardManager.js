@@ -54,7 +54,6 @@ class ShardManager {
         }
     }
     _checkQueue() {
-        this.client.emit("debug", `Checking queue Length: ${this.connectQueue.length} LastAttempt: ${this.lastConnectionAttempt} Current Time: ${Date.now()}`);
         if (this.connectQueue.length > 0 && ((this.lastConnectionAttempt || 0) <= Date.now() - 6000)) {
             const toConnect = this.connectQueue.splice(0, 1);
             for (const shard of toConnect) {
