@@ -77,10 +77,10 @@ class DiscordConnector extends events_1.EventEmitter {
                 break;
             case Constants_1.GATEWAY_OP_CODES.HELLO:
                 this.heartbeat();
-                this.heartbeatInterval = message.d.heartbeat_interval - 5000;
+                this.heartbeatInterval = message.d.heartbeat_interval;
                 this.heartbeatTimeout = setInterval(async () => {
-                    if (this.lastACKAt <= Date.now() - (this.heartbeatInterval * 2)) {
-                        this.client.emit("debug", `Shard ${this.id} has not received a heartbeat ACK in ${this.heartbeatInterval * 2}ms.`);
+                    if (this.lastACKAt <= Date.now() - (this.heartbeatInterval + 5000)) {
+                        this.client.emit("debug", `Shard ${this.id} has not received a heartbeat ACK in ${this.heartbeatInterval + 5000}ms.`);
                         if (this.options.reconnect)
                             this._reconnect();
                     }
@@ -206,8 +206,10 @@ class DiscordConnector extends events_1.EventEmitter {
         if (code === 1000 && reason === "Disconnect from User") {
             gracefulClose = true;
         }
-        if (this.heartbeatInterval)
-            clearInterval(this.heartbeatInterval);
+        if (this.heartbeatTimeout) {
+            clearInterval(this.heartbeatTimeout);
+            this.heartbeatTimeout = null;
+        }
         (_a = this.betterWs) === null || _a === void 0 ? void 0 : _a.removeAllListeners();
         this.emit("disconnect", code, reason, forceIdentify, gracefulClose);
     }

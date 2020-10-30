@@ -447,8 +447,8 @@
         "affectsGlobalScope": false
       },
       "../node_modules/snowtransfer/dist/src/ratelimitbuckets/localbucket.d.ts": {
-        "version": "850b0ac7bef3d0a48380c755b1cda9bb5ad1fa756b5fca5d36292df1e10ef51a",
-        "signature": "850b0ac7bef3d0a48380c755b1cda9bb5ad1fa756b5fca5d36292df1e10ef51a",
+        "version": "51d0057e0f206191acfa12f8306c4f2070279e9d38d0e65c1f4315b47156afd6",
+        "signature": "51d0057e0f206191acfa12f8306c4f2070279e9d38d0e65c1f4315b47156afd6",
         "affectsGlobalScope": false
       },
       "../node_modules/snowtransfer/dist/src/ratelimiter.d.ts": {
@@ -472,8 +472,8 @@
         "affectsGlobalScope": false
       },
       "../node_modules/snowtransfer/dist/src/methods/channels.d.ts": {
-        "version": "ec77f6199995d278cf648779a77339e5698180c75664d48abeeb72b8be8edee8",
-        "signature": "ec77f6199995d278cf648779a77339e5698180c75664d48abeeb72b8be8edee8",
+        "version": "cc794e0315a87de7e0b2325d6883d489a21f5bcb1ad906ea8e452d95b25b4ef7",
+        "signature": "cc794e0315a87de7e0b2325d6883d489a21f5bcb1ad906ea8e452d95b25b4ef7",
         "affectsGlobalScope": false
       },
       "../node_modules/snowtransfer/dist/src/cache/dewcache.d.ts": {
@@ -482,8 +482,8 @@
         "affectsGlobalScope": false
       },
       "../node_modules/snowtransfer/dist/src/cache/usercache.d.ts": {
-        "version": "7ae475707647c0f40ca311a7b4f2f4851a34922efc968fd490ed9ce9961690ba",
-        "signature": "7ae475707647c0f40ca311a7b4f2f4851a34922efc968fd490ed9ce9961690ba",
+        "version": "2b7bcad9311976693ed56c22fde3bcc8d4b409ead15c561508427817d284c291",
+        "signature": "2b7bcad9311976693ed56c22fde3bcc8d4b409ead15c561508427817d284c291",
         "affectsGlobalScope": false
       },
       "../node_modules/snowtransfer/dist/src/methods/users.d.ts": {
@@ -497,8 +497,8 @@
         "affectsGlobalScope": false
       },
       "../node_modules/snowtransfer/dist/src/methods/webhooks.d.ts": {
-        "version": "d05b14b7bbb7068336826a294eef0274da40d92e686c3ad91dea627a9299c5c4",
-        "signature": "d05b14b7bbb7068336826a294eef0274da40d92e686c3ad91dea627a9299c5c4",
+        "version": "7089be6b7a5c8ed82c98b7b90783e8e8217947cbf3dd01049ef0484f7fe5c881",
+        "signature": "7089be6b7a5c8ed82c98b7b90783e8e8217947cbf3dd01049ef0484f7fe5c881",
         "affectsGlobalScope": false
       },
       "../node_modules/snowtransfer/dist/src/methods/guilds.d.ts": {
@@ -567,7 +567,7 @@
         "affectsGlobalScope": false
       },
       "../src/connector/discordconnector.ts": {
-        "version": "93b6d9b7bf34f8b214e35c4eeb34191dae92f6472a04389424efb41e12298fd7",
+        "version": "31a396af3f80aa1aabc8af139ab1a09477a57b302c30f4e0572965d4958881a2",
         "signature": "3fe0bead2fa7e95c80a3a34bcf250c49f4e19bfc50916fa3bba978db974df303",
         "affectsGlobalScope": false
       },
