@@ -127,6 +127,7 @@ class DiscordConnector extends EventEmitter {
 				if (this.lastACKAt <= Date.now() - (this.heartbeatInterval + 5000)) {
 					this.client.emit("debug", `Shard ${this.id} has not received a heartbeat ACK in ${this.heartbeatInterval + 5000}ms.`);
 					if (this.options.reconnect) this._reconnect();
+					else this.disconnect();
 				} else {
 					this.heartbeat();
 				}
@@ -143,7 +144,8 @@ class DiscordConnector extends EventEmitter {
 			break;
 		case OP.RECONNECT:
 			this.client.emit("debug", `Gateway asked shard ${this.id} to reconnect`);
-			if (this.options.reconnect) this._reconnect();
+			if (this.options.reconnect) this._reconnect(true);
+			else this.disconnect();
 			break;
 		case OP.INVALID_SESSION:
 			if (message.d && this.sessionId) {
@@ -159,9 +161,13 @@ class DiscordConnector extends EventEmitter {
 		}
 	}
 
-	private async _reconnect() {
-		this.reset();
-		await this.betterWs?.close(1012, "reconnecting");
+	private async _reconnect(resume = false) {
+		await this.betterWs?.close(resume ? 1000 : 1012, "reconnecting");
+		if (resume) {
+			this.clearHeartBeat();
+		} else {
+			this.reset();
+		}
 		this.connect();
 	}
 
@@ -173,6 +179,10 @@ class DiscordConnector extends EventEmitter {
 		this.seq = 0;
 		this.lastACKAt = 0;
 		this._trace = null;
+		this.clearHeartBeat();
+	}
+
+	private clearHeartBeat() {
 		if (this.heartbeatTimeout) clearInterval(this.heartbeatTimeout);
 		this.heartbeatTimeout = null;
 		this.heartbeatInterval = 0;
@@ -252,30 +262,44 @@ class DiscordConnector extends EventEmitter {
 		let forceIdentify = false;
 		let gracefulClose = false;
 		this.status = "disconnected";
-		if (code === 4004) {
-			this.emit("error", "Tried to connect with an invalid token");
+		if (code === 4014) {
+			this.emit("error", "Disallowed Intents, check your client options and application page");
 			return;
 		}
-		if (code === 4010) {
-			this.emit("error", "Invalid sharding data, check your client options");
+		if (code === 4013) {
+			this.emit("error", "Invalid Intents data, check your client options");
+			return;
+		}
+		if (code === 4012) {
+			this.emit("error", "Invalid API version");
 			return;
 		}
 		if (code === 4011) {
 			this.emit("error", "Shard would be on over 2500 guilds. Add more shards");
 			return;
 		}
+		if (code === 4010) {
+			this.emit("error", "Invalid sharding data, check your client options");
+			return;
+		}
 		// force identify if the session is marked as invalid
 		if (code === 4009) {
 			forceIdentify = true;
+		}
+		// Invalid sequence
+		if (code === 4007) {
+			this._reconnect();
+			return;
+		}
+		if (code === 4004) {
+			this.emit("error", "Tried to connect with an invalid token");
+			return;
 		}
 		// don't try to reconnect when true
 		if (code === 1000 && reason === "Disconnect from User") {
 			gracefulClose = true;
 		}
-		if (this.heartbeatTimeout) {
-			clearInterval(this.heartbeatTimeout);
-			this.heartbeatTimeout = null;
-		}
+		this.clearHeartBeat();
 		this.betterWs?.removeAllListeners();
 		this.emit("disconnect", code, reason, forceIdentify, gracefulClose);
 	}

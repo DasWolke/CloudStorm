@@ -567,8 +567,8 @@
         "affectsGlobalScope": false
       },
       "../src/connector/discordconnector.ts": {
-        "version": "31a396af3f80aa1aabc8af139ab1a09477a57b302c30f4e0572965d4958881a2",
-        "signature": "3fe0bead2fa7e95c80a3a34bcf250c49f4e19bfc50916fa3bba978db974df303",
+        "version": "23850d984443f2accce9d65e95037d884cd9c75aad69e28b88e2c8a05bd11c04",
+        "signature": "a90d476432580bb00f9cf91a803458fbff7d4261f2baf6c4dadc4df3a3b2b980",
         "affectsGlobalScope": false
       },
       "../src/shard.ts": {

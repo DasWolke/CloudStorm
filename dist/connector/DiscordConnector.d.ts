@@ -31,6 +31,7 @@ declare class DiscordConnector extends EventEmitter {
     private messageAction;
     private _reconnect;
     private reset;
+    private clearHeartBeat;
     identify(force?: boolean): Promise<void>;
     private resume;
     private heartbeat;
