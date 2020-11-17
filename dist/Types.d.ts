@@ -1,3 +1,4 @@
+import Constants from "./Constants";
 export interface IntentFlags {
     GUILDS: number;
     GUILD_MEMBERS: number;
@@ -17,7 +18,7 @@ export interface IntentFlags {
 }
 export declare type IntentResolvable = number | Array<number> | keyof IntentFlags | Array<keyof IntentFlags>;
 export interface IWSMessage {
-    op: number;
+    op: typeof Constants["GATEWAY_OP_CODES"][keyof typeof Constants.GATEWAY_OP_CODES];
     d?: any;
     s?: number;
     t?: string;
@@ -25,16 +26,16 @@ export interface IWSMessage {
 export interface IGatewayMessage extends IWSMessage {
     shard_id: number;
 }
-export interface IPresenceGame {
+export interface IPresenceActivity {
     name: string;
-    type?: number;
+    type?: 0 | 1 | 2 | 3 | 5;
     url?: string;
 }
 export interface IPresence {
-    status?: string;
+    status?: "online" | "idle" | "dnd" | "offline";
     afk?: boolean;
     since?: boolean;
-    game?: IPresenceGame | null;
+    activities?: Array<IPresenceActivity> | null;
 }
 export interface IClientOptions {
     largeGuildThreshold?: number;
@@ -60,18 +61,4 @@ export interface IRequestGuildMembers {
 export interface IShardReady {
     id: number;
     ready: boolean;
-}
-export interface GATEWAY_OP_CODES {
-    DISPATCH: number;
-    HEARTBEAT: number;
-    IDENTIFY: number;
-    STATUS_UPDATE: number;
-    VOICE_STATE_UPDATE: number;
-    VOICE_SERVER_PING: number;
-    RESUME: number;
-    RECONNECT: number;
-    REQUEST_GUILD_MEMBERS: number;
-    INVALID_SESSION: number;
-    HELLO: number;
-    HEARTBEAT_ACK: number;
 }

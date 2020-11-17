@@ -8,7 +8,9 @@ let Erlpack;
 try {
     Erlpack = require("erlpack");
 }
-catch (e) { }
+catch (e) {
+    Erlpack = null;
+}
 const Constants_1 = __importDefault(require("./Constants"));
 const snowtransfer_1 = __importDefault(require("snowtransfer"));
 const ShardManager_1 = __importDefault(require("./ShardManager"));
@@ -61,12 +63,12 @@ class Client extends events_1.EventEmitter {
     disconnect() {
         return this.shardManager.disconnect();
     }
-    async statusUpdate(data) {
-        await this.shardManager.statusUpdate(data);
+    async presenceUpdate(data) {
+        await this.shardManager.presenceUpdate(data);
         void undefined;
     }
     shardStatusUpdate(shardId, data) {
-        return this.shardManager.shardStatusUpdate(shardId, data);
+        return this.shardManager.shardPresenceUpdate(shardId, data);
     }
     voiceStateUpdate(shardId, data) {
         return this.shardManager.voiceStateUpdate(shardId, data);

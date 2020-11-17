@@ -20,8 +20,8 @@ declare class ShardManager {
     private _addListener;
     private _checkReady;
     private _checkDisconnect;
-    statusUpdate(data?: import("./Types").IPresence): Promise<void>;
-    shardStatusUpdate(shardId: number, data?: import("./Types").IPresence): Promise<void>;
+    presenceUpdate(data?: import("./Types").IPresence): Promise<void>;
+    shardPresenceUpdate(shardId: number, data?: import("./Types").IPresence): Promise<void>;
     voiceStateUpdate(shardId: number, data: import("./Types").IVoiceStateUpdate): Promise<void>;
     requestGuildMembers(shardId: number, data: import("./Types").IRequestGuildMembers): Promise<void>;
 }

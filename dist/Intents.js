@@ -25,7 +25,7 @@ function resolve(bit = 0) {
     if (typeof bit === "string")
         return flags[bit] | 0;
     if (Array.isArray(bit))
-        return bit.map(p => resolve(p)).reduce((prev, p) => prev | p, 0);
+        return bit.map((p) => resolve(p)).reduce((prev, p) => prev | p, 0);
     const error = new RangeError("BITFIELD_INVALID");
     throw error;
 }

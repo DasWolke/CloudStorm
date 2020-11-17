@@ -17,9 +17,10 @@ declare class Shard extends EventEmitter {
     emit<E extends keyof ShardEvents>(event: E, ...args: ShardEvents[E]): boolean;
     once<E extends keyof ShardEvents>(event: E, listener: (...args: ShardEvents[E]) => any): this;
     on<E extends keyof ShardEvents>(event: E, listener: (...args: ShardEvents[E]) => any): this;
+    get latency(): number;
     connect(): void;
     disconnect(): Promise<void>;
-    statusUpdate(data: import("./Types").IPresence): Promise<void>;
+    presenceUpdate(data: import("./Types").IPresence): Promise<void>;
     voiceStateUpdate(data: import("./Types").IVoiceStateUpdate): Promise<void>;
     requestGuildMembers(data: import("./Types").IRequestGuildMembers): Promise<void>;
 }

@@ -22,6 +22,8 @@ declare class DiscordConnector extends EventEmitter {
     sessionId: string | null;
     forceIdentify: boolean;
     lastACKAt: number;
+    lastHeartbeatSend: number;
+    latency: number;
     constructor(id: number, client: import("../Client"));
     emit<E extends keyof ConnectorEvents>(event: E, ...args: ConnectorEvents[E]): boolean;
     once<E extends keyof ConnectorEvents>(event: E, listener: (...args: ConnectorEvents[E]) => any): this;
@@ -37,7 +39,7 @@ declare class DiscordConnector extends EventEmitter {
     private heartbeat;
     private handleDispatch;
     private handleWsClose;
-    statusUpdate(data?: import("../Types").IPresence): Promise<void>;
+    presenceUpdate(data?: import("../Types").IPresence): Promise<void>;
     voiceStateUpdate(data: import("../Types").IVoiceStateUpdate): Promise<void>;
     requestGuildMembers(data: import("../Types").IRequestGuildMembers): Promise<void>;
     private _checkPresenceData;

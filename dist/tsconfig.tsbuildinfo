@@ -207,8 +207,8 @@
         "affectsGlobalScope": true
       },
       "../src/constants.ts": {
-        "version": "52814140a978d1987674f51003cfd4dff7b9ba09d6bf0a5b9d0a36d56f4df814",
-        "signature": "b2d95693ac7cd76af1084ed4c90fdcaa1f6a9abd28d193be129b7d73fd94c709",
+        "version": "8926cffb22f691112f31670d7885d69c862bdf6a8da046848d27ccba0555dbcf",
+        "signature": "872ab2c3a51aead743e1082e0a03b37003fb896d8fb8c8a6d244bfd49234a029",
         "affectsGlobalScope": false
       },
       "../node_modules/@types/node/globals.d.ts": {
@@ -537,18 +537,18 @@
         "affectsGlobalScope": false
       },
       "../node_modules/@types/ws/index.d.ts": {
-        "version": "30ce0ba2c80c39007ab8e0132807437b4eb58ff73461e1602e2e2bf07b6416ed",
-        "signature": "30ce0ba2c80c39007ab8e0132807437b4eb58ff73461e1602e2e2bf07b6416ed",
+        "version": "c6e185824cae1ddea6706f4256d4bd499e8e9a37ed10689946c22984d68798c3",
+        "signature": "c6e185824cae1ddea6706f4256d4bd499e8e9a37ed10689946c22984d68798c3",
         "affectsGlobalScope": false
       },
       "../src/structures/ratelimitbucket.ts": {
-        "version": "74b5dca38abb3e36fa56cc56123b9a8dc40134332d4b6a6c7d5e3c4c74ae713e",
+        "version": "13c24ea83a54d2be6f4a9b0840e86bf6482cd90dd29765b83c0b24864f626a4e",
         "signature": "5f3c0fff298b8112032ac77b072bfd1aba3e287ef66264ec9b87e4e2868a0978",
         "affectsGlobalScope": false
       },
       "../src/types.ts": {
-        "version": "e6c50dc2e36586769d8badcf19eba76fe25c4b7788980e5bb7b916e91452d2a9",
-        "signature": "e6a03f8baf0866fed72e2d7505212cf859be3e464c6a546c88ce6f66d3491071",
+        "version": "b59e800a6d3d3be388565e1eb82857dcae27f4a49caa30464cb0453ddb991a51",
+        "signature": "4624af8d1a65f3682f4513e924c838eec1ac37c765e6fd64f4c619163dfcc732",
         "affectsGlobalScope": false
       },
       "../node_modules/erlpack/js/index.d.ts": {
@@ -557,33 +557,33 @@
         "affectsGlobalScope": false
       },
       "../src/structures/betterws.ts": {
-        "version": "8843a1dca9cd66cfc28cb739463318b690b346df705ceedce70248f124a767ae",
-        "signature": "548f39d876e08b5559f5b31c04c27cd604113e8ef5ab13723fa4dbbd9e2bdd44",
+        "version": "b8888e0a41d2448cdd9577ff140e1130a42f0affd85db120bd96d4ed4fb195fa",
+        "signature": "cd0984a8255c9a24532f05ab040b06b98c3534430b8616809971fe814d325f88",
         "affectsGlobalScope": false
       },
       "../src/intents.ts": {
-        "version": "7f2c88a23bc4b2ebe7280c3eab27c23277fdacff1a0ba80d300a0f766bae3a4c",
+        "version": "44a376682dd453a357e3584dd593cc0c132654313335b63a1aaf95243221ac4c",
         "signature": "9803e718800b83ff4e45a109516fbb0f69ae1f5a6dd48814d97d5e979a0230cd",
         "affectsGlobalScope": false
       },
       "../src/connector/discordconnector.ts": {
-        "version": "23850d984443f2accce9d65e95037d884cd9c75aad69e28b88e2c8a05bd11c04",
-        "signature": "a90d476432580bb00f9cf91a803458fbff7d4261f2baf6c4dadc4df3a3b2b980",
+        "version": "d6530b95f9b3f2acbfe4a72a3f51cf826553722b236c434320da654050a99c81",
+        "signature": "670d9bd02235a5de91f3831d4a41a54705bdb417a4afd8ccc54bc936b3f37a54",
         "affectsGlobalScope": false
       },
       "../src/shard.ts": {
-        "version": "a35d1da455944044f4e70efe930769d820781724e811f5d8abc8ab7e7cf6669c",
-        "signature": "46d0fcc34e6620e5a3721550bd8432858711e3b74a7e8ddbb6ec66dc5bec8195",
+        "version": "76fd9ae217b489e59c75937e296a7ee97bac73a71bd31e5a95a8ab131b8c557a",
+        "signature": "fce106c5a44b8c8a9959aa8db888b584a946f951508775f58179044435891946",
         "affectsGlobalScope": false
       },
       "../src/shardmanager.ts": {
-        "version": "4294c05f2be75c0ad643226e3ecaeedc4c4de8fd9ffc04ca6c231fb644db6d43",
-        "signature": "c6847cc4e21750b8b339989d9e1f6ed478275ea69b3b593cbf60d208660ae02a",
+        "version": "8368b4757f51defba6e56359652b748050f888b46e5cd0666551e098700f5751",
+        "signature": "f6e0f25063c02a638159b50d21e0d0ad139d894516deffca0b5972c73a86e712",
         "affectsGlobalScope": false
       },
       "../src/client.ts": {
-        "version": "be48e545ec3d6adc80d733677f3f8baf3fbd7cb7ff27a5c8cf20c49fcacbfbc0",
-        "signature": "155ef76b4f74a87d04de6855880d94af92566acce539cfd42ee5f87e4b7255c0",
+        "version": "9dc5f91a689e896ed19298a56fe8d2b1629cf67e046cb0415241c8a75085382c",
+        "signature": "8cfe0781562bb02ab682203762700e0ae279ff8dc4990c157d54b88614aa92c5",
         "affectsGlobalScope": false
       }
     },
@@ -903,6 +903,9 @@
         "../src/constants.ts",
         "../src/structures/ratelimitbucket.ts",
         "../src/types.ts"
+      ],
+      "../src/types.ts": [
+        "../src/constants.ts"
       ]
     },
     "exportedModulesMap": {
@@ -1153,6 +1156,7 @@
       ],
       "../src/client.ts": [
         "../node_modules/@types/node/events.d.ts",
+        "../src/constants.ts",
         "../src/shardmanager.ts",
         "../src/types.ts"
       ],
@@ -1182,6 +1186,9 @@
         "../node_modules/zlib-sync/index.d.ts",
         "../src/structures/ratelimitbucket.ts",
         "../src/types.ts"
+      ],
+      "../src/types.ts": [
+        "../src/constants.ts"
       ]
     },
     "semanticDiagnosticsPerFile": [
@@ -1304,5 +1311,5 @@
       "../src/types.ts"
     ]
   },
-  "version": "4.0.3"
+  "version": "4.0.5"
 }

@@ -108,19 +108,15 @@ class ShardManager {
         }
         this.client.emit("disconnected");
     }
-    async statusUpdate(data = {}) {
-        const shardPromises = [];
+    async presenceUpdate(data = {}) {
         for (const shardKey in this.shards) {
             if (this.shards[shardKey]) {
                 const shard = this.shards[shardKey];
-                if (shard.ready) {
-                    shardPromises.push(shard.statusUpdate(data));
-                }
+                this.shardPresenceUpdate(shard.id, data);
             }
         }
-        await Promise.all(shardPromises);
     }
-    shardStatusUpdate(shardId, data = {}) {
+    shardPresenceUpdate(shardId, data = {}) {
         return new Promise((res, rej) => {
             const shard = this.shards[shardId];
             if (!shard) {
@@ -128,10 +124,10 @@ class ShardManager {
             }
             if (!shard.ready) {
                 shard.once("ready", () => {
-                    shard.statusUpdate(data).then(result => res(result)).catch(e => rej(e));
+                    shard.presenceUpdate(data).then(result => res(result)).catch(e => rej(e));
                 });
             }
-            shard.statusUpdate(data).then(result => res(result)).catch(e => rej(e));
+            shard.presenceUpdate(data).then(result => res(result)).catch(e => rej(e));
         });
     }
     voiceStateUpdate(shardId, data) {

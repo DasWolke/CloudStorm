@@ -1,7 +1,7 @@
 "use strict";
 
 /**
- * RatelimitBucket, used for ratelimiting the execution of functions
+ * RatelimitBucket, used for ratelimiting the execution of functions.
  */
 class RatelimitBucket {
 	public fnQueue: Array<{ fn: (...args: Array<any>) => any, callback: () => any }>;
@@ -11,9 +11,9 @@ class RatelimitBucket {
 	public resetTimeout: NodeJS.Timeout | null;
 
 	/**
-	 * Create a new Bucket
-	 * @param limit Number of functions that may be executed during the timeframe set in limitReset
-	 * @param limitReset Timeframe in milliseconds until the ratelimit resets
+	 * Create a new Bucket.
+	 * @param limit Number of functions that may be executed during the timeframe set in limitReset.
+	 * @param limitReset Timeframe in milliseconds until the ratelimit resets.
 	 */
 	public constructor(limit = 5, limitReset = 5000) {
 		this.fnQueue = [];
@@ -24,9 +24,9 @@ class RatelimitBucket {
 	}
 
 	/**
-	 * Queue a function to be executed
-	 * @param fn function to be executed
-	 * @returns Result of the function if any
+	 * Queue a function to be executed.
+	 * @param fn Function to be executed.
+	 * @returns Result of the function if any.
 	 */
 	public queue(fn: (...args: Array<any>) => any): Promise<any> {
 		return new Promise((res, rej) => {
@@ -55,9 +55,9 @@ class RatelimitBucket {
 	}
 
 	/**
-	 * Check if there are any functions in the queue that haven't been executed yet
+	 * Check if there are any functions in the queue that haven't been executed yet.
 	 */
-	private checkQueue() {
+	private checkQueue(): void {
 		if (this.fnQueue.length > 0 && this.remaining !== 0) {
 			const queuedFunc = this.fnQueue.splice(0, 1)[0];
 			queuedFunc.callback();
@@ -65,18 +65,18 @@ class RatelimitBucket {
 	}
 
 	/**
-	 * Reset the remaining tokens to the base limit
+	 * Reset the remaining tokens to the base limit.
 	 */
-	private resetRemaining() {
+	private resetRemaining(): void {
 		this.remaining = this.limit;
 		if (this.resetTimeout) clearTimeout(this.resetTimeout);
 		this.checkQueue();
 	}
 
 	/**
-	 * Clear the current queue of events to be sent
+	 * Clear the current queue of events to be sent.
 	 */
-	public dropQueue() {
+	public dropQueue(): void {
 		this.fnQueue = [];
 	}
 }

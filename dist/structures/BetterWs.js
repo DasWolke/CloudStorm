@@ -8,7 +8,9 @@ let Erlpack;
 try {
     Erlpack = require("erlpack");
 }
-catch (e) { }
+catch (e) {
+    Erlpack = null;
+}
 const Constants_1 = require("../Constants");
 const ws_1 = __importDefault(require("ws"));
 const RatelimitBucket_1 = __importDefault(require("./RatelimitBucket"));
@@ -18,7 +20,7 @@ class BetterWs extends events_1.EventEmitter {
         this.ws = new ws_1.default(address, options);
         this.bindWs(this.ws);
         this.wsBucket = new RatelimitBucket_1.default(120, 60000);
-        this.statusBucket = new RatelimitBucket_1.default(5, 60000);
+        this.presenceBucket = new RatelimitBucket_1.default(5, 20000);
         this.zlibInflate = new zlib_sync_1.default.Inflate({ chunkSize: 65535 });
     }
     emit(event, ...args) {
@@ -50,7 +52,7 @@ class BetterWs extends events_1.EventEmitter {
         this.options = options;
         this.wsBucket.dropQueue();
         this.wsBucket = new RatelimitBucket_1.default(120, 60000);
-        this.statusBucket = new RatelimitBucket_1.default(5, 60000);
+        this.presenceBucket = new RatelimitBucket_1.default(5, 60000);
         this.bindWs(this.ws);
     }
     onOpen() {
@@ -87,7 +89,7 @@ class BetterWs extends events_1.EventEmitter {
     sendMessage(data) {
         this.emit("debug_send", data);
         return new Promise((res, rej) => {
-            const status = data.op === Constants_1.GATEWAY_OP_CODES.STATUS_UPDATE;
+            const presence = data.op === Constants_1.GATEWAY_OP_CODES.PRESENCE_UPDATE;
             try {
                 if (Erlpack) {
                     data = Erlpack.pack(data);
@@ -109,23 +111,24 @@ class BetterWs extends events_1.EventEmitter {
                     });
                 });
             };
-            if (status) {
-                this.statusBucket.queue(sendMsg);
+            if (presence) {
+                this.presenceBucket.queue(sendMsg);
             }
             else {
                 sendMsg();
             }
         });
     }
-    close(code = 1000, reason = "") {
+    close(code = 1000, reason = "Unknown") {
         return new Promise((res, rej) => {
-            this.ws.close(code, reason);
-            this.ws.once("close", () => {
-                return res();
-            });
-            setTimeout(() => {
+            const timeout = setTimeout(() => {
                 return rej("Websocket not closed within 5 seconds");
             }, 5 * 1000);
+            this.ws.once("close", () => {
+                clearTimeout(timeout);
+                return res();
+            });
+            this.ws.close(code, reason);
         });
     }
 }

@@ -50,6 +50,9 @@ class Shard extends events_1.EventEmitter {
     on(event, listener) {
         return super.on(event, listener);
     }
+    get latency() {
+        return this.connector.latency;
+    }
     connect() {
         if (this.forceIdentify) {
             this.connector.forceIdentify = true;
@@ -60,8 +63,8 @@ class Shard extends events_1.EventEmitter {
     disconnect() {
         return this.connector.disconnect();
     }
-    statusUpdate(data) {
-        return this.connector.statusUpdate(data);
+    presenceUpdate(data) {
+        return this.connector.presenceUpdate(data);
     }
     voiceStateUpdate(data) {
         return this.connector.voiceStateUpdate(data);

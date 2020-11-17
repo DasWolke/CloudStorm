@@ -2,11 +2,12 @@
 
 const version = require("../package.json").version;
 import { EventEmitter } from "events";
-let Erlpack: typeof import("erlpack");
+let Erlpack: typeof import("erlpack") | null;
 try {
 	Erlpack = require("erlpack");
-// eslint-disable-next-line no-empty
-} catch (e) {}
+} catch (e) {
+	Erlpack = null;
+}
 import Constants from "./Constants";
 import SnowTransfer from "snowtransfer";
 import ShardManager from "./ShardManager";
@@ -25,7 +26,7 @@ interface ClientEvents {
 }
 
 /**
- * Main class used for receiving events and interacting with the discord gateway
+ * Main class used for receiving events and interacting with the Discord gateway.
  */
 class Client extends EventEmitter {
 	public token: string;
@@ -35,8 +36,8 @@ class Client extends EventEmitter {
 	private _restClient: SnowTransfer;
 
 	/**
-	 * Create a new Client to connect to the gateway
-	 * @param token token received from creating a discord bot user, which will be used to connect to the gateway
+	 * Create a new Client to connect to the Discord gateway.
+	 * @param token Token received from creating a discord bot user, which will be used to connect to the gateway.
 	 */
 	public constructor(token: string, options: import("./Types").IClientOptions = {}) {
 		super();
@@ -60,25 +61,25 @@ class Client extends EventEmitter {
 		this._restClient = new SnowTransfer(token);
 	}
 
-	public emit<E extends keyof ClientEvents>(event: E, ...args: ClientEvents[E]) {
+	public emit<E extends keyof ClientEvents>(event: E, ...args: ClientEvents[E]): boolean {
 		return super.emit(event, ...args);
 	}
-	public once<E extends keyof ClientEvents>(event: E, listener: (...args: ClientEvents[E]) => any) {
+	public once<E extends keyof ClientEvents>(event: E, listener: (...args: ClientEvents[E]) => any): this {
 		// @ts-ignore SHUT UP!!!
 		return super.once(event, listener);
 	}
-	public on<E extends keyof ClientEvents>(event: E, listener: (...args: ClientEvents[E]) => any) {
+	public on<E extends keyof ClientEvents>(event: E, listener: (...args: ClientEvents[E]) => any): this {
 		// @ts-ignore
 		return super.on(event, listener);
 	}
 
-	public static get Constants() {
+	public static get Constants(): typeof Constants {
 		return Constants;
 	}
 
 	/**
-	 * Create one or more connections (depending on the selected amount of shards) to the discord gateway
-	 * @returns This function returns a promise which is solely used for awaiting the getGateway() method's return value
+	 * Create one or more connections (depending on the selected amount of shards) to the Discord gateway.
+	 * @returns This function returns a promise which is solely used for awaiting the getGateway() method's return value.
 	 */
 	public async connect(): Promise<void> {
 		const gatewayUrl = await this.getGateway();
@@ -87,8 +88,8 @@ class Client extends EventEmitter {
 	}
 
 	/**
-	 * Get the gateway endpoint to connect to
-	 * @returns String url with the Gateway Endpoint to connect to
+	 * Get the gateway endpoint to connect to.
+	 * @returns String url with the Gateway Endpoint to connect to.
 	 */
 	public async getGateway(): Promise<string> {
 		const gatewayData = await this._restClient.bot.getGateway();
@@ -96,8 +97,8 @@ class Client extends EventEmitter {
 	}
 
 	/**
-	 * Get the GatewayData including recommended amount of shards
-	 * @returns Object with url and shards to use to connect to discord
+	 * Get the GatewayData including recommended amount of shards.
+	 * @returns Object with url and shards to use to connect to discord.
 	 */
 	public async getGatewayBot(): Promise<any> {
 		return this._restClient.bot.getGatewayBot();
@@ -105,64 +106,70 @@ class Client extends EventEmitter {
 
 	/**
 	 * Disconnect the bot gracefully,
-	 * you will receive a 'disconnected' Event once the bot successfully shutdown
+	 * you will receive a 'disconnected' event once the ShardManager successfully closes all shard websocket connections.
 	 */
-	public disconnect() {
+	public disconnect(): void {
 		return this.shardManager.disconnect();
 	}
 
 	/**
-	 * Send a status update to discord, which updates the status of all shards
-	 * @returns Promise that's resolved once all shards have sent the websocket payload
+	 * Send an OP 3 PRESENCE_UPDATE to Discord, which updates the status of all shards facilitated by this client's ShardManager.
+	 * @returns Promise that's resolved once all shards have sent the websocket payload.
 	 *
 	 * @example
-	 * //Connect bot to discord and set status to do not disturb and game to "Memes are Dreams"
-	 * let bot = new CloudStorm(token)
-	 * await bot.connect()
-	 * bot.on('ready', () => {
-	 *   // Bot is connected to discord and ready so we can update the status
-	 *   bot.statusUpdate({status:'dnd', game:{name:'Memes are Dreams'}})
+	 * // Connect to Discord and set status to do not disturb and game to "Memes are Dreams".
+	 * const CloudStorm = require("cloudstorm"); // CloudStorm also supports import statements.
+	 * const token = "token";
+	 * const client = new CloudStorm.Client(token);
+	 * client.connect();
+	 * client.once("ready", () => {
+	 * 	// Client is connected to Discord and is ready, so we can update the status.
+	 * 	client.presenceUpdate({ status: "dnd", game: { name: "Memes are Dreams" } });
 	 * });
 	 */
-	public async statusUpdate(data: import("./Types").IPresence): Promise<void> {
-		await this.shardManager.statusUpdate(data);
+	public async presenceUpdate(data: import("./Types").IPresence): Promise<void> {
+		await this.shardManager.presenceUpdate(data);
 		void undefined;
 	}
 
 	/**
-	 * Send a status update to discord, which updates the status of a single shard
-	 * @param shardId Id of the shard that should update it's status
-	 * @param data
-	 * @returns Promise that's resolved once the shard has sent the websocket payload
+	 * Send an OP 3 PRESENCE_UPDATE to Discord, which updates the status of a single shard facilitated by this client's ShardManager.
+	 * @param shardId id of the shard that should update it's status.
+	 * @param data Presence data to send.
+	 * @returns Promise that's resolved once the shard has sent the websocket payload.
 	 *
 	 * @example
-	 * //Connect bot to discord and set status to do not disturb and game to "Im shard 0"
-	 * let bot = new CloudStorm(token)
-	 * await bot.connect()
-	 * bot.on('ready', () => {
-	 *   // Bot is connected to discord and ready so we can update the status of shard 0
-	 *   bot.shardStatusUpdate(0, {status:'dnd', game:{name:'Im shard 0'}})
+	 * // Connect to Discord and set status to do not disturb and game to "Im shard 0".
+	 * const CloudStorm = require("cloudstorm"); // CloudStorm also supports import statements.
+	 * const token = "token";
+	 * const client = new CloudStorm.Client(token);
+	 * client.connect();
+	 * client.once("ready", () => {
+	 * 	// Client is connected to Discord and is ready, so we can update the status of shard 0.
+	 * 	client.shardPresenceUpdate(0, { status: "dnd", game: { name: "Im shard 0" } });
 	 * });
 	 */
 	public shardStatusUpdate(shardId: number, data: import("./Types").IPresence): Promise<void> {
-		return this.shardManager.shardStatusUpdate(shardId, data);
+		return this.shardManager.shardPresenceUpdate(shardId, data);
 	}
 
 	/**
-	 * Send a voice state update to discord, this does **not** allow you to send audio with cloudstorm itself,
-	 * it just provides the necessary data for another application to send audio data to discord
-	 * @param shardId id of the shard that should send the payload
-	 * @param data voice state update data to send
-	 * @returns Promise that's resolved once the payload was sent to discord
+	 * Send an OP 4 VOICE_STATE_UPDATE to Discord. this does **not** allow you to send audio with CloudStorm itself,
+	 * it just provides the necessary data for another application to send audio data to Discord.
+	 * @param shardId id of the shard that should send the payload.
+	 * @param data Voice state update data to send.
+	 * @returns Promise that's resolved once the payload was sent to Discord.
 	 *
 	 * @example
-	 * //Connect bot to discord and join a voice channel
-	 * let bot = new CloudStorm(token)
-	 * await bot.connect()
-	 * bot.on('ready', () => {
-	 *   // Bot is connected to discord and ready so we can join a voice channel
-	 *   // We will use shard 0 as the shard to send the payload
-	 *   bot.voiceStateUpdate(0, {guild_id:'id', channel_id:'id', self_mute:false, self_deaf:false})
+	 * // Connect to Discord and join a voice channel
+	 * const CloudStorm = require("cloudstorm"); // CloudStorm also supports import statements.
+	 * const token = "token";
+	 * const client = new CloudStorm.Client(token);
+	 * client.connect();
+	 * client.once("ready", () => {
+	 * 	// Client is connected to Discord and is ready, so we can join a voice channel.
+	 * 	// We will use shard 0 as the shard to send the payload.
+	 * 	client.voiceStateUpdate(0, { guild_id: "id", channel_id: "id", self_mute: false, self_deaf: false });
 	 * });
 	 */
 	public voiceStateUpdate(shardId: number, data: import("./Types").IVoiceStateUpdate): Promise<void> {
@@ -170,19 +177,21 @@ class Client extends EventEmitter {
 	}
 
 	/**
-	 * Send a request guild members update to discord
-	 * @param shardId id of the shard that should send the payload
-	 * @param data
-	 * @returns Promise that's resolved once the payload was send to discord
+	 * Send an OP 8 REQUEST_GUILD_MEMBERS to Discord.
+	 * @param shardId id of the shard that should send the payload.
+	 * @param data Request guild members data to send.
+	 * @returns Promise that's resolved once the payload was send to Discord.
 	 *
 	 * @example
-	 * //Connect bot to discord and set status to do not disturb and game to "Memes are Dreams"
-	 * let bot = new CloudStorm(token)
-	 * await bot.connect()
-	 * bot.on('ready', () => {
-	 *   // Bot is connected to discord and ready so we can send the request guild members payload
-	 *   // We will use shard 0 as the shard to send the payload
-	 *   bot.requestGuildMembers(0, {guild_id:'id'})
+	 * // Connect to Discord and request guild members.
+	 * const CloudStorm = require("cloudstorm"); // CloudStorm also supports import statements.
+	 * const token = "token";
+	 * const client = new CloudStorm.Client(token);
+	 * client.connect();
+	 * client.once("ready", () => {
+	 * 	// Client is connected to Discord and is ready, so we can send the request guild members payload.
+	 * 	// We will use shard 0 as the shard to send the payload.
+	 * 	client.requestGuildMembers(0, { guild_id: "id" });
 	 * });
 	 */
 	public requestGuildMembers(shardId: number, data: import("./Types").IRequestGuildMembers): Promise<void> {
@@ -192,7 +201,11 @@ class Client extends EventEmitter {
 		return this.shardManager.requestGuildMembers(shardId, data);
 	}
 
-	private _updateEndpoint(gatewayUrl: string) {
+	/**
+	 * Update the endpoint shard websockets will connect to.
+	 * @param gatewayUrl Base gateway wss url to update the cached endpoint to.
+	 */
+	private _updateEndpoint(gatewayUrl: string): void {
 		this.options.endpoint = `${gatewayUrl}?v=${Constants.GATEWAY_VERSION}&encoding=${Erlpack ? "etf" : "json"}&compress=zlib-stream`;
 	}
 }

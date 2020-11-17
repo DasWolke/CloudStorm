@@ -12,9 +12,9 @@ interface ShardEvents {
 }
 
 /**
- * Shard class, which provides a wrapper around the DiscordConnector with metadata like the id of the shard
+ * Shard class, which provides a wrapper around the DiscordConnector with metadata like the id of the shard.
  *
- * This class is automatically instantiated by the library and is documented for reference
+ * This class is automatically instantiated by the library and is documented for reference.
  */
 class Shard extends EventEmitter {
 	public id: number;
@@ -24,9 +24,9 @@ class Shard extends EventEmitter {
 	public connector: DiscordConnector;
 
 	/**
-	 * Create a new Shard
-	 * @param id Id of the shard
-	 * @param client main class used for forwarding events
+	 * Create a new Shard.
+	 * @param id id of the shard.
+	 * @param client Main class used for forwarding events.
 	 */
 	public constructor(id: number, client: import("./Client")) {
 		super();
@@ -39,13 +39,16 @@ class Shard extends EventEmitter {
 		this.connector.on("event", (event) => {
 			const newEvent: import("./Types").IGatewayMessage = Object.assign(event, { shard_id: this.id });
 			this.client.emit("event", newEvent);
+
 			switch (event.op) {
 			case OP_CODES.DISPATCH:
 				this.client.emit("dispatch", newEvent);
 				break;
+
 			case OP_CODES.VOICE_STATE_UPDATE:
 				this.client.emit("voiceStateUpdate", newEvent);
 				break;
+
 			default:
 				break;
 			}
@@ -65,22 +68,29 @@ class Shard extends EventEmitter {
 		});
 	}
 
-	public emit<E extends keyof ShardEvents>(event: E, ...args: ShardEvents[E]) {
+	public emit<E extends keyof ShardEvents>(event: E, ...args: ShardEvents[E]): boolean {
 		return super.emit(event, ...args);
 	}
-	public once<E extends keyof ShardEvents>(event: E, listener: (...args: ShardEvents[E]) => any) {
+	public once<E extends keyof ShardEvents>(event: E, listener: (...args: ShardEvents[E]) => any): this {
 		// @ts-ignore SHUT UP!!!
 		return super.once(event, listener);
 	}
-	public on<E extends keyof ShardEvents>(event: E, listener: (...args: ShardEvents[E]) => any) {
+	public on<E extends keyof ShardEvents>(event: E, listener: (...args: ShardEvents[E]) => any): this {
 		// @ts-ignore
 		return super.on(event, listener);
 	}
 
 	/**
-	 * Create a new Connection to discord
+	 * Time in ms it took for Discord to ackknowledge an OP 1 HEARTBEAT.
 	 */
-	public connect() {
+	public get latency(): number {
+		return this.connector.latency;
+	}
+
+	/**
+	 * Create a new connection to Discord.
+	 */
+	public connect(): void {
 		if (this.forceIdentify) {
 			this.connector.forceIdentify = true;
 			this.forceIdentify = false;
@@ -89,33 +99,33 @@ class Shard extends EventEmitter {
 	}
 
 	/**
-	 * Close the current connection
+	 * Close the current connection to Discord.
 	 */
 	public disconnect(): Promise<void> {
 		return this.connector.disconnect();
 	}
 
 	/**
-	 * Send a status update payload to discord
-	 * @param data data to send
+	 * Send an OP 3 PRESENCE_UPDATE to Discord.
+	 * @param data Data to send.
 	 */
-	statusUpdate(data: import("./Types").IPresence): Promise<void> {
-		return this.connector.statusUpdate(data);
+	public presenceUpdate(data: import("./Types").IPresence): Promise<void> {
+		return this.connector.presenceUpdate(data);
 	}
 
 	/**
-	 * Send a voice state update payload to discord
-	 * @param data data to send
+	 * Send an OP 4 VOICE_STATE_UPDATE to Discord.
+	 * @param data Data to send
 	 */
-	voiceStateUpdate(data: import("./Types").IVoiceStateUpdate): Promise<void> {
+	public voiceStateUpdate(data: import("./Types").IVoiceStateUpdate): Promise<void> {
 		return this.connector.voiceStateUpdate(data);
 	}
 
 	/**
-	 * Send a request guild members payload to discord
-	 * @param data data to send
+	 * Send an OP 8 REQUEST_GUILD_MEMBERS to Discord.
+	 * @param data Data to send.
 	 */
-	requestGuildMembers(data: import("./Types").IRequestGuildMembers): Promise<void> {
+	public requestGuildMembers(data: import("./Types").IRequestGuildMembers): Promise<void> {
 		return this.connector.requestGuildMembers(data);
 	}
 }

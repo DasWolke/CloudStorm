@@ -38,30 +38,30 @@ const flags = {
 };
 
 /**
- * Bitfield representing all privileged intents
+ * Bitfield representing all privileged intents.
  * @see {@link https://discord.com/developers/docs/topics/gateway#privileged-intents}
  */
 const privileged: number = flags.GUILD_MEMBERS | flags.GUILD_PRESENCES;
 
 /**
- * Bitfield representing all intents combined
+ * Bitfield representing all intents combined.
  */
 const all: number = Object.values(flags).reduce((acc, p) => acc | p, 0);
 
 /**
- * Bitfield representing all non-privileged intents
+ * Bitfield representing all non-privileged intents.
  */
 const non_privileged: number = all & ~privileged;
 
 /**
  * Resolves bitfields to their numeric form.
- * @param bit bit(s) to resolve
+ * @param bit bit(s) to resolve.
  */
 function resolve(bit: import("./Types").IntentResolvable = 0): number {
 	if (typeof bit === "number" && bit >= 0) return bit;
 	if (typeof bit === "string") return flags[bit] | 0;
 	// @ts-ignore
-	if (Array.isArray(bit)) return bit.map(p => resolve(p)).reduce((prev, p) => prev | p, 0);
+	if (Array.isArray(bit)) return bit.map((p: import("./Types").IntentResolvable) => resolve(p)).reduce((prev, p) => prev | p, 0);
 	const error = new RangeError("BITFIELD_INVALID");
 	throw error;
 }

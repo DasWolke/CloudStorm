@@ -14,7 +14,7 @@ interface BWSEvents {
 declare class BetterWs extends EventEmitter {
     ws: WebSocket;
     wsBucket: RatelimitBucket;
-    statusBucket: RatelimitBucket;
+    presenceBucket: RatelimitBucket;
     zlibInflate: zlib.Inflate;
     options: WebSocket.ClientOptions;
     constructor(address: string, options?: import("ws").ClientOptions);
