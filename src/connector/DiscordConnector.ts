@@ -129,7 +129,6 @@ class DiscordConnector extends EventEmitter {
 
 		case OP.HEARTBEAT:
 			this.heartbeat();
-			this.lastHeartbeatSend = Date.now();
 			break;
 
 		case OP.RECONNECT:
@@ -254,6 +253,7 @@ class DiscordConnector extends EventEmitter {
 	 */
 	private heartbeat(): void {
 		this.betterWs?.sendMessage({ op: OP.HEARTBEAT, d: this.seq });
+		this.lastHeartbeatSend = Date.now();
 	}
 
 	/**

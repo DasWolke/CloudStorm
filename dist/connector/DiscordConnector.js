@@ -79,7 +79,6 @@ class DiscordConnector extends events_1.EventEmitter {
                 break;
             case Constants_1.GATEWAY_OP_CODES.HEARTBEAT:
                 this.heartbeat();
-                this.lastHeartbeatSend = Date.now();
                 break;
             case Constants_1.GATEWAY_OP_CODES.RECONNECT:
                 this.client.emit("debug", `Gateway asked shard ${this.id} to reconnect`);
@@ -183,6 +182,7 @@ class DiscordConnector extends events_1.EventEmitter {
     heartbeat() {
         var _a;
         (_a = this.betterWs) === null || _a === void 0 ? void 0 : _a.sendMessage({ op: Constants_1.GATEWAY_OP_CODES.HEARTBEAT, d: this.seq });
+        this.lastHeartbeatSend = Date.now();
     }
     handleDispatch(message) {
         switch (message.t) {

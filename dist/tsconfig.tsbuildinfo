@@ -567,7 +567,7 @@
         "affectsGlobalScope": false
       },
       "../src/connector/discordconnector.ts": {
-        "version": "d6530b95f9b3f2acbfe4a72a3f51cf826553722b236c434320da654050a99c81",
+        "version": "9389932c79f5bfa364eb68519bc6b25375490dec13815e6aef55de78233a7e8b",
         "signature": "670d9bd02235a5de91f3831d4a41a54705bdb417a4afd8ccc54bc936b3f37a54",
         "affectsGlobalScope": false
       },
