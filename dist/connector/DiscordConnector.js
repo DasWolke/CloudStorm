@@ -45,8 +45,8 @@ class DiscordConnector extends events_1.EventEmitter {
         this.betterWs.on("ws_open", () => {
             this.status = "connecting";
         });
-        this.betterWs.on("ws_message", this.messageAction);
-        this.betterWs.on("ws_close", this.handleWsClose);
+        this.betterWs.on("ws_message", msg => this.messageAction(msg));
+        this.betterWs.on("ws_close", (code, reason) => this.handleWsClose(code, reason));
         this.betterWs.on("debug", event => {
             this.client.emit("debug", event);
         });
