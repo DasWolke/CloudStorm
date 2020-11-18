@@ -41,8 +41,10 @@ class RatelimitBucket {
     }
     resetRemaining() {
         this.remaining = this.limit;
-        if (this.resetTimeout)
+        if (this.resetTimeout) {
             clearTimeout(this.resetTimeout);
+            this.resetTimeout = null;
+        }
         this.checkQueue();
     }
     dropQueue() {

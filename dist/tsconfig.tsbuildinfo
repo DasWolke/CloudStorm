@@ -542,7 +542,7 @@
         "affectsGlobalScope": false
       },
       "../src/structures/ratelimitbucket.ts": {
-        "version": "13c24ea83a54d2be6f4a9b0840e86bf6482cd90dd29765b83c0b24864f626a4e",
+        "version": "b8fd77ebdb9cd8e90464d3ff4c7387a65bae8c9a57cf3e8a18be1793e9b2a22c",
         "signature": "5f3c0fff298b8112032ac77b072bfd1aba3e287ef66264ec9b87e4e2868a0978",
         "affectsGlobalScope": false
       },
