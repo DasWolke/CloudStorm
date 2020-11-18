@@ -41,13 +41,11 @@ class ShardManager {
         if ((this.lastConnectionAttempt || 0) <= Date.now() - 6000) {
             if (action === "identify") {
                 this.lastConnectionAttempt = Date.now();
-                this.client.emit("debug", `Identifying shard ${shard.id}`);
                 shard.connector.identify(true);
             }
             else {
                 if (shard.connector.status !== "connecting" && !shard.ready) {
                     this.lastConnectionAttempt = Date.now();
-                    this.client.emit("debug", `Connecting shard ${shard.id}`);
                     shard.connect();
                 }
             }
@@ -72,7 +70,7 @@ class ShardManager {
             this.client.emit("error", error);
         });
         shard.on("disconnect", (code, reason, forceIdentify, gracefulClose) => {
-            this.client.emit("debug", `${shard.id} ws closed with code ${code} and reason: ${reason}`);
+            this.client.emit("debug", `Websocket of shard ${shard.id} closed with code ${code} and reason: ${reason ? reason : "None"}`);
             if (code === 1000 && gracefulClose) {
                 this._checkDisconnect();
                 return;

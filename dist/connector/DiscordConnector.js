@@ -45,13 +45,8 @@ class DiscordConnector extends events_1.EventEmitter {
         this.betterWs.on("ws_open", () => {
             this.status = "connecting";
         });
-        this.betterWs.on("ws_message", (msg) => {
-            this.messageAction(msg);
-        });
-        this.betterWs.on("ws_close", (code, reason) => {
-            this.client.emit("debug", `Websocket of shard ${this.id} closed with code ${code} and reason: ${reason}`);
-            this.handleWsClose(code, reason);
-        });
+        this.betterWs.on("ws_message", this.messageAction);
+        this.betterWs.on("ws_close", this.handleWsClose);
         this.betterWs.on("debug", event => {
             this.client.emit("debug", event);
         });
@@ -104,7 +99,7 @@ class DiscordConnector extends events_1.EventEmitter {
                     if (this.lastACKAt <= Date.now() - (this.heartbeatInterval + 5000)) {
                         this.client.emit("debug", `Shard ${this.id} has not received a heartbeat ACK in ${this.heartbeatInterval + 5000}ms.`);
                         if (this.options.reconnect)
-                            this._reconnect();
+                            this._reconnect(true);
                         else
                             this.disconnect();
                     }
@@ -126,7 +121,7 @@ class DiscordConnector extends events_1.EventEmitter {
     }
     async _reconnect(resume = false) {
         var _a;
-        await ((_a = this.betterWs) === null || _a === void 0 ? void 0 : _a.close(resume ? 1000 : 1012, "reconnecting"));
+        await ((_a = this.betterWs) === null || _a === void 0 ? void 0 : _a.close(resume ? 4000 : 1012, "reconnecting"));
         if (resume) {
             this.clearHeartBeat();
         }
