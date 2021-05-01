@@ -7,22 +7,23 @@ export declare namespace engines {
 }
 export declare const types: string;
 export declare const scripts: {
-    "build:docs": string;
     "build:src": string;
 };
 export declare const author: string;
 export declare const license: string;
 export declare const dependencies: {
-    "@types/node": string;
-    "@types/ws": string;
     "snowtransfer": string;
     "ws": string;
     "zlib-sync": string;
 };
-export declare namespace devDependencies {
-    export const eslint: string;
-}
+export declare const devDependencies: {
+    "@types/node": string;
+    "@types/ws": string;
+    "@typescript-eslint/eslint-plugin": string;
+    "@typescript-eslint/parser": string;
+    "eslint": string;
+    "typescript": string;
+};
 export declare namespace optionalDependencies {
-    export const amqp: string;
     export const erlpack: string;
 }
