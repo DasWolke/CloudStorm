@@ -1,12 +1,12 @@
 {
   "name": "cloudstorm",
-  "version": "0.2.2",
+  "version": "0.2.3",
   "description": "Minimalistic Discord Gateway library",
-  "main": "./dist/Client.js",
+  "main": "./dist/src/Client.js",
   "engines": {
     "node": ">=8.0.0"
   },
-  "types": "./dist/Client.d.ts",
+  "types": "./dist/src/Client.d.ts",
   "scripts": {
     "build:src": "tsc -p ."
   },
