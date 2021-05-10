@@ -25,6 +25,22 @@ interface ClientEvents {
 	disconnected: [];
 }
 
+interface Client {
+	addListener<E extends keyof ClientEvents>(event: E, listener: (...args: ClientEvents[E]) => any): this;
+	emit<E extends keyof ClientEvents>(event: E, ...args: ClientEvents[E]): boolean;
+	eventNames(): Array<keyof ClientEvents>;
+	listenerCount(event: keyof ClientEvents): number;
+	listeners(event: keyof ClientEvents): Array<(...args: Array<any>) => any>;
+	off<E extends keyof ClientEvents>(event: E, listener: (...args: ClientEvents[E]) => any): this;
+	on<E extends keyof ClientEvents>(event: E, listener: (...args: ClientEvents[E]) => any): this;
+	once<E extends keyof ClientEvents>(event: E, listener: (...args: ClientEvents[E]) => any): this;
+	prependListener<E extends keyof ClientEvents>(event: E, listener: (...args: ClientEvents[E]) => any): this;
+	prependOnceListener<E extends keyof ClientEvents>(event: E, listener: (...args: ClientEvents[E]) => any): this;
+	rawListeners(event: keyof ClientEvents): Array<(...args: Array<any>) => any>;
+	removeAllListeners(event?: keyof ClientEvents): this;
+	removeListener<E extends keyof ClientEvents>(event: E, listener: (...args: ClientEvents[E]) => any): this;
+}
+
 /**
  * Main class used for receiving events and interacting with the Discord gateway.
  */
@@ -34,6 +50,9 @@ class Client extends EventEmitter {
 	public shardManager: ShardManager;
 	public version: any;
 	private _restClient: SnowTransfer;
+
+	public static Constants = Constants;
+	public Constants = Constants;
 
 	/**
 	 * Create a new Client to connect to the Discord gateway.
@@ -59,22 +78,6 @@ class Client extends EventEmitter {
 		this.shardManager = new ShardManager(this);
 		this.version = version;
 		this._restClient = new SnowTransfer(token);
-	}
-
-	public emit<E extends keyof ClientEvents>(event: E, ...args: ClientEvents[E]): boolean {
-		return super.emit(event, ...args);
-	}
-	public once<E extends keyof ClientEvents>(event: E, listener: (...args: ClientEvents[E]) => any): this {
-		// @ts-ignore SHUT UP!!!
-		return super.once(event, listener);
-	}
-	public on<E extends keyof ClientEvents>(event: E, listener: (...args: ClientEvents[E]) => any): this {
-		// @ts-ignore
-		return super.on(event, listener);
-	}
-
-	public static get Constants(): typeof Constants {
-		return Constants;
 	}
 
 	/**

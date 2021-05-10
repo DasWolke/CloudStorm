@@ -107,13 +107,12 @@ class ShardManager {
 			this.client.emit("error", error);
 		});
 
-		shard.on("disconnect", (code, reason, forceIdentify, gracefulClose) => {
+		shard.on("disconnect", (code, reason, gracefulClose) => {
 			this.client.emit("debug", `Websocket of shard ${shard.id} closed with code ${code} and reason: ${reason ? reason : "None"}`);
 			if (code === 1000 && gracefulClose) {
 				this._checkDisconnect();
 				return;
 			}
-			shard.forceIdentify = forceIdentify;
 			this.connectQueue.push({action: "connect", shard});
 		});
 		shard.on("queueIdentify", (shardId) => {

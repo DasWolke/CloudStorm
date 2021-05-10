@@ -23,6 +23,22 @@ interface BWSEvents {
 	debug: [string];
 }
 
+interface BetterWs {
+	addListener<E extends keyof BWSEvents>(event: E, listener: (...args: BWSEvents[E]) => any): this;
+	emit<E extends keyof BWSEvents>(event: E, ...args: BWSEvents[E]): boolean;
+	eventNames(): Array<keyof BWSEvents>;
+	listenerCount(event: keyof BWSEvents): number;
+	listeners(event: keyof BWSEvents): Array<(...args: Array<any>) => any>;
+	off<E extends keyof BWSEvents>(event: E, listener: (...args: BWSEvents[E]) => any): this;
+	on<E extends keyof BWSEvents>(event: E, listener: (...args: BWSEvents[E]) => any): this;
+	once<E extends keyof BWSEvents>(event: E, listener: (...args: BWSEvents[E]) => any): this;
+	prependListener<E extends keyof BWSEvents>(event: E, listener: (...args: BWSEvents[E]) => any): this;
+	prependOnceListener<E extends keyof BWSEvents>(event: E, listener: (...args: BWSEvents[E]) => any): this;
+	rawListeners(event: keyof BWSEvents): Array<(...args: Array<any>) => any>;
+	removeAllListeners(event?: keyof BWSEvents): this;
+	removeListener<E extends keyof BWSEvents>(event: E, listener: (...args: BWSEvents[E]) => any): this;
+}
+
 /**
  * Helper Class for simplifying the websocket connection to Discord.
  */
@@ -43,18 +59,6 @@ class BetterWs extends EventEmitter {
 		this.wsBucket = new RatelimitBucket(120, 60000);
 		this.presenceBucket = new RatelimitBucket(5, 20000);
 		this.zlibInflate = new zlib.Inflate({ chunkSize: 65535 });
-	}
-
-	public emit<E extends keyof BWSEvents>(event: E, ...args: BWSEvents[E]): boolean {
-		return super.emit(event, ...args);
-	}
-	public once<E extends keyof BWSEvents>(event: E, listener: (...args: BWSEvents[E]) => any): this {
-		// @ts-ignore SHUT UP!!!
-		return super.once(event, listener);
-	}
-	public on<E extends keyof BWSEvents>(event: E, listener: (...args: BWSEvents[E]) => any): this {
-		// @ts-ignore
-		return super.on(event, listener);
 	}
 
 	/**

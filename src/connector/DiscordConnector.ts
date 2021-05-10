@@ -10,7 +10,23 @@ interface ConnectorEvents {
 	event: [import("../Types").IWSMessage];
 	ready: [boolean];
 	error: [string];
-	disconnect: [number, string, boolean, boolean];
+	disconnect: [number, string, boolean];
+}
+
+interface DiscordConnector {
+	addListener<E extends keyof ConnectorEvents>(event: E, listener: (...args: ConnectorEvents[E]) => any): this;
+	emit<E extends keyof ConnectorEvents>(event: E, ...args: ConnectorEvents[E]): boolean;
+	eventNames(): Array<keyof ConnectorEvents>;
+	listenerCount(event: keyof ConnectorEvents): number;
+	listeners(event: keyof ConnectorEvents): Array<(...args: Array<any>) => any>;
+	off<E extends keyof ConnectorEvents>(event: E, listener: (...args: ConnectorEvents[E]) => any): this;
+	on<E extends keyof ConnectorEvents>(event: E, listener: (...args: ConnectorEvents[E]) => any): this;
+	once<E extends keyof ConnectorEvents>(event: E, listener: (...args: ConnectorEvents[E]) => any): this;
+	prependListener<E extends keyof ConnectorEvents>(event: E, listener: (...args: ConnectorEvents[E]) => any): this;
+	prependOnceListener<E extends keyof ConnectorEvents>(event: E, listener: (...args: ConnectorEvents[E]) => any): this;
+	rawListeners(event: keyof ConnectorEvents): Array<(...args: Array<any>) => any>;
+	removeAllListeners(event?: keyof ConnectorEvents): this;
+	removeListener<E extends keyof ConnectorEvents>(event: E, listener: (...args: ConnectorEvents[E]) => any): this;
 }
 
 /**
@@ -30,7 +46,6 @@ class DiscordConnector extends EventEmitter {
 	public seq: number;
 	public status: string;
 	public sessionId: string | null;
-	public forceIdentify: boolean;
 	public lastACKAt: number;
 	public lastHeartbeatSend: number;
 	public latency: number;
@@ -53,22 +68,9 @@ class DiscordConnector extends EventEmitter {
 		this.seq = 0;
 		this.status = "init";
 		this.sessionId = null;
-		this.forceIdentify = false;
 		this.lastACKAt = 0;
 		this.lastHeartbeatSend = 0;
 		this.latency = 0;
-	}
-
-	public emit<E extends keyof ConnectorEvents>(event: E, ...args: ConnectorEvents[E]): boolean {
-		return super.emit(event, ...args);
-	}
-	public once<E extends keyof ConnectorEvents>(event: E, listener: (...args: ConnectorEvents[E]) => any): this {
-		// @ts-ignore SHUT UP!!!
-		return super.once(event, listener);
-	}
-	public on<E extends keyof ConnectorEvents>(event: E, listener: (...args: ConnectorEvents[E]) => any): this {
-		// @ts-ignore
-		return super.on(event, listener);
 	}
 
 	/**
@@ -208,7 +210,7 @@ class DiscordConnector extends EventEmitter {
 	 * @param force Whether CloudStorm should send an OP 2 IDENTIFY even if there's a session that could be resumed.
 	 */
 	public async identify(force?: boolean): Promise<void> {
-		if (this.sessionId && !this.forceIdentify && !force) {
+		if (this.sessionId && !force) {
 			return this.resume();
 		}
 
@@ -217,9 +219,9 @@ class DiscordConnector extends EventEmitter {
 			d: {
 				token: this.options.token,
 				properties: {
-					os: process.platform,
-					browser: "CloudStorm",
-					device: "CloudStorm"
+					$os: process.platform,
+					$browser: "CloudStorm",
+					$device: "CloudStorm"
 				},
 				large_threshold: this.options.largeGuildThreshold,
 				shard: [this.id, this.options.shardAmount],
@@ -229,7 +231,6 @@ class DiscordConnector extends EventEmitter {
 
 		if (this.options.initialPresence) Object.assign(data.d, { presence: this._checkPresenceData(this.options.initialPresence) });
 
-		this.forceIdentify = false;
 		return this.betterWs?.sendMessage(data);
 	}
 
@@ -278,73 +279,86 @@ class DiscordConnector extends EventEmitter {
 	 * @param reason Close reason if any.
 	 */
 	private handleWsClose(code: number, reason: string): void {
-		let forceIdentify = false;
 		let gracefulClose = false;
 		this.status = "disconnected";
 
 		// Disallowed Intents.
 		if (code === 4014) {
 			this.emit("error", "Disallowed Intents, check your client options and application page.");
-			return;
 		}
 
 		// Invalid Intents.
 		if (code === 4013) {
 			this.emit("error", "Invalid Intents data, check your client options.");
-			return;
 		}
 
 		// Invalid API version.
 		if (code === 4012) {
 			this.emit("error", "Invalid API version.");
-			return;
 		}
 
 		// Sharding required.
 		if (code === 4011) {
 			this.emit("error", "Shard would be on over 2500 guilds. Add more shards.");
-			return;
 		}
 
 		// Invalid shard.
 		if (code === 4010) {
 			this.emit("error", "Invalid sharding data, check your client options.");
-			return;
 		}
 
 		// Session timed out.
 		// force identify if the session is marked as invalid.
 		if (code === 4009) {
 			this.emit("error", "Session timed out.");
-			forceIdentify = true;
+			this._reconnect(true);
 		}
 
 		// Rate limited.
 		if (code === 4008) {
 			this.emit("error", "You are being rate limited. Wait before sending more packets.");
-			return;
+			this._reconnect(true);
 		}
 
 		// Invalid sequence.
 		if (code === 4007) {
+			this.emit("error", "Invalid sequence. Reconnecting and starting a new session.");
 			this._reconnect();
-			return;
 		}
 
 		// Already authenticated.
 		if (code === 4005) {
 			this.emit("error", "You sent more than one OP 2 IDENTIFY payload while the websocket was open.");
+			this._reconnect(true);
 		}
 
 		// Authentication failed.
 		if (code === 4004) {
 			this.emit("error", "Tried to connect with an invalid token");
-			return;
 		}
 
 		// Not authenticated.
 		if (code === 4003) {
 			this.emit("error", "You tried to send a packet before sending an OP 2 IDENTIFY or OP 6 RESUME.");
+			this._reconnect(true);
+		}
+
+		// Decode error.
+		if (code === 4002) {
+			this.emit("error", "You sent an invalid payload");
+			this._reconnect(true);
+		}
+
+		// Invalid opcode.
+		if (code === 4001) {
+			this.emit("error", "You sent an invalid opcode or invalid payload for an opcode");
+			this._reconnect(true);
+		}
+
+		// Generic error.
+		if (code === 4000) {
+			this.emit("error", "Error code 4000 received. Attempting to resume");
+			this._reconnect(true);
 		}
 
 		// Don't try to reconnect when true
@@ -352,9 +366,11 @@ class DiscordConnector extends EventEmitter {
 			gracefulClose = true;
 		}
 
-		this.clearHeartBeat();
-		this.betterWs?.removeAllListeners();
-		this.emit("disconnect", code, reason, forceIdentify, gracefulClose);
+		if (gracefulClose) {
+			this.clearHeartBeat();
+			this.betterWs?.removeAllListeners();
+		}
+		this.emit("disconnect", code, reason, gracefulClose);
 	}
 
 	/**

@@ -5,10 +5,26 @@ import DiscordConnector from "./connector/DiscordConnector";
 import { GATEWAY_OP_CODES as OP_CODES } from "./Constants";
 
 interface ShardEvents {
-	disconnect: [number, string, boolean, boolean];
+	disconnect: [number, string, boolean];
 	error: [string];
 	ready: [boolean];
 	queueIdentify: [number];
+}
+
+interface Shard {
+	addListener<E extends keyof ShardEvents>(event: E, listener: (...args: ShardEvents[E]) => any): this;
+	emit<E extends keyof ShardEvents>(event: E, ...args: ShardEvents[E]): boolean;
+	eventNames(): Array<keyof ShardEvents>;
+	listenerCount(event: keyof ShardEvents): number;
+	listeners(event: keyof ShardEvents): Array<(...args: Array<any>) => any>;
+	off<E extends keyof ShardEvents>(event: E, listener: (...args: ShardEvents[E]) => any): this;
+	on<E extends keyof ShardEvents>(event: E, listener: (...args: ShardEvents[E]) => any): this;
+	once<E extends keyof ShardEvents>(event: E, listener: (...args: ShardEvents[E]) => any): this;
+	prependListener<E extends keyof ShardEvents>(event: E, listener: (...args: ShardEvents[E]) => any): this;
+	prependOnceListener<E extends keyof ShardEvents>(event: E, listener: (...args: ShardEvents[E]) => any): this;
+	rawListeners(event: keyof ShardEvents): Array<(...args: Array<any>) => any>;
+	removeAllListeners(event?: keyof ShardEvents): this;
+	removeListener<E extends keyof ShardEvents>(event: E, listener: (...args: ShardEvents[E]) => any): this;
 }
 
 /**
@@ -19,7 +35,6 @@ interface ShardEvents {
 class Shard extends EventEmitter {
 	public id: number;
 	public client: import("./Client");
-	public forceIdentify: boolean;
 	public ready: boolean;
 	public connector: DiscordConnector;
 
@@ -33,7 +48,6 @@ class Shard extends EventEmitter {
 
 		this.id = id;
 		this.client = client;
-		this.forceIdentify = false;
 		this.ready = false;
 		this.connector = new DiscordConnector(id, client);
 		this.connector.on("event", (event) => {
@@ -68,18 +82,6 @@ class Shard extends EventEmitter {
 		});
 	}
 
-	public emit<E extends keyof ShardEvents>(event: E, ...args: ShardEvents[E]): boolean {
-		return super.emit(event, ...args);
-	}
-	public once<E extends keyof ShardEvents>(event: E, listener: (...args: ShardEvents[E]) => any): this {
-		// @ts-ignore SHUT UP!!!
-		return super.once(event, listener);
-	}
-	public on<E extends keyof ShardEvents>(event: E, listener: (...args: ShardEvents[E]) => any): this {
-		// @ts-ignore
-		return super.on(event, listener);
-	}
-
 	/**
 	 * Time in ms it took for Discord to ackknowledge an OP 1 HEARTBEAT.
 	 */
@@ -91,10 +93,6 @@ class Shard extends EventEmitter {
 	 * Create a new connection to Discord.
 	 */
 	public connect(): void {
-		if (this.forceIdentify) {
-			this.connector.forceIdentify = true;
-			this.forceIdentify = false;
-		}
 		this.connector.connect();
 	}
 

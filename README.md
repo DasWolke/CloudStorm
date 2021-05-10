@@ -19,20 +19,20 @@ You may wonder how you you are able to get the id of a shard where an event orig
 So an event you receive may look like this:
 ```json
 {
-  "op":0,
-  "t":"PRESENCE_UPDATE",
-  "s":1337,
-  "shard_id":0,
-  "d": {
-    "game": null,
-    "guild_id": "id",
-    "nick": null,
-    "roles": [],
-    "status": "offline",
-    "user": { 
-     "id": "id"
-    } 
-  }
+	"op":0,
+	"t":"PRESENCE_UPDATE",
+	"s":1337,
+	"shard_id":0,
+	"d": {
+		"game": null,
+		"guild_id": "id",
+		"nick": null,
+		"roles": [],
+		"status": "offline",
+		"user": {
+		"id": "id"
+		}
+	}
 }
 ```
 #### Microservice Bots:
