@@ -362,11 +362,15 @@ class DiscordConnector extends EventEmitter {
 			this.connect();
 		}
 
-		// Generic error.
+		// Generic error / safe self closing code.
 		if (code === 4000) {
-			this.emit("error", "Error code 4000 received. Attempting to resume");
-			this.clearHeartBeat();
-			this.connect();
+			if (reason === "reconnecting") {
+				gracefulClose = true;
+			} else {
+				this.emit("error", "Error code 4000 received. Attempting to resume");
+				this.clearHeartBeat();
+				this.connect();
+			}
 		}
 
 		// Don't try to reconnect when true
