@@ -62,8 +62,7 @@ function resolve(bit: import("./Types").IntentResolvable = 0): number {
 	if (typeof bit === "string" && flags[bit]) return flags[bit] | 0;
 	// @ts-ignore
 	if (Array.isArray(bit)) return bit.map((p: import("./Types").IntentResolvable) => resolve(p)).reduce((prev, p) => prev | p, 0);
-	const error = new RangeError("BITFIELD_INVALID");
-	throw error;
+	throw new RangeError("BITFIELD_INVALID");
 }
 
 
