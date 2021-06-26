@@ -5,6 +5,8 @@ import BetterWs from "../structures/BetterWs";
 import { GATEWAY_OP_CODES as OP } from "../Constants";
 import Intents from "../Intents";
 
+let reconnecting = false;
+
 interface ConnectorEvents {
 	queueIdentify: [number];
 	event: [import("../Types").IWSMessage];
@@ -57,6 +59,7 @@ class DiscordConnector extends EventEmitter {
 	 */
 	public constructor(id: number, client: import("../Client")) {
 		super();
+
 		this.id = id;
 		this.client = client;
 		this.options = client.options;
@@ -85,6 +88,7 @@ class DiscordConnector extends EventEmitter {
 		}
 		this.betterWs.on("ws_open", () => {
 			this.status = "connecting";
+			reconnecting = false;
 		});
 		this.betterWs.on("ws_message", msg => this.messageAction(msg));
 		this.betterWs.on("ws_close", (code, reason) => this.handleWsClose(code, reason));
@@ -176,6 +180,7 @@ class DiscordConnector extends EventEmitter {
 	 * @param resume Whether or not the client intends to send an OP 6 RESUME later.
 	 */
 	private async _reconnect(resume = false): Promise<void> {
+		if (resume) reconnecting = true;
 		await this.betterWs?.close(resume ? 4000 : 1012, "reconnecting");
 		if (resume) {
 			this.clearHeartBeat();
@@ -248,6 +253,7 @@ class DiscordConnector extends EventEmitter {
 	 * Send an OP 1 HEARTBEAT to the gateway.
 	 */
 	private heartbeat(): void {
+		if (this.betterWs?.ws.readyState !== WebSocket.OPEN) return;
 		this.betterWs?.sendMessage({ op: OP.HEARTBEAT, d: this.seq });
 		this.lastHeartbeatSend = Date.now();
 	}
@@ -364,7 +370,7 @@ class DiscordConnector extends EventEmitter {
 
 		// Generic error / safe self closing code.
 		if (code === 4000) {
-			if (reason === "reconnecting") {
+			if (reconnecting) {
 				gracefulClose = true;
 			} else {
 				this.emit("error", "Error code 4000 received. Attempting to resume");
