@@ -4,6 +4,7 @@ import { EventEmitter } from "events";
 import BetterWs from "../structures/BetterWs";
 import { GATEWAY_OP_CODES as OP } from "../Constants";
 import Intents from "../Intents";
+import WebSocket from "ws";
 
 let reconnecting = false;
 
