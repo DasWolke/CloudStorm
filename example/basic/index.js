@@ -1,5 +1,5 @@
 "use strict";
-let CloudStorm = require("../../");
+let CloudStorm = require("../../dist/Client");
 let token = require("../config.json").token;
 let bot = new CloudStorm(token);
 let startup = async () => {
