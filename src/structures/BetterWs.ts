@@ -1,11 +1,12 @@
 "use strict";
 
 import { EventEmitter } from "events";
-import zlib from "zlib-sync";
+import zlib from "zlib";
+
 let Erlpack: typeof import("erlpack") | null;
 try {
 	Erlpack = require("erlpack");
-} catch (e) {
+} catch {
 	Erlpack = null;
 }
 import { GATEWAY_OP_CODES } from "../Constants";
@@ -46,7 +47,6 @@ class BetterWs extends EventEmitter {
 	public ws: WebSocket;
 	public wsBucket: RatelimitBucket;
 	public presenceBucket: RatelimitBucket;
-	public zlibInflate: zlib.Inflate;
 	public options: WebSocket.ClientOptions;
 
 	/**
@@ -58,7 +58,6 @@ class BetterWs extends EventEmitter {
 		this.bindWs(this.ws);
 		this.wsBucket = new RatelimitBucket(120, 60000);
 		this.presenceBucket = new RatelimitBucket(5, 20000);
-		this.zlibInflate = new zlib.Inflate({ chunkSize: 65535 });
 	}
 
 	/**
@@ -90,7 +89,6 @@ class BetterWs extends EventEmitter {
 	 */
 	public recreateWs(address: string, options: import("ws").ClientOptions = {}): void {
 		this.ws.removeAllListeners();
-		this.zlibInflate = new zlib.Inflate({ chunkSize: 65535 });
 		this.ws = new WebSocket(address, options);
 		this.options = options;
 		this.wsBucket.dropQueue();
@@ -120,12 +118,12 @@ class BetterWs extends EventEmitter {
 				message[length - 3] === 0x00 &&
 				message[length - 2] === 0xFF &&
 				message[length - 1] === 0xFF;
-			this.zlibInflate.push(message, flush ? zlib.Z_SYNC_FLUSH : false);
+			const inflated = zlib.inflateSync(message, { flush: flush ? zlib.constants.Z_SYNC_FLUSH : undefined, chunkSize: 65535 });
 			if (!flush) return;
 			if (Erlpack) {
-				parsed = Erlpack.unpack(this.zlibInflate.result as Buffer);
+				parsed = Erlpack.unpack(inflated);
 			} else {
-				parsed = JSON.parse(String(this.zlibInflate.result));
+				parsed = JSON.parse(String(inflated));
 			}
 		} catch (e) {
 			this.emit("error", `Message: ${message} was not parseable`);

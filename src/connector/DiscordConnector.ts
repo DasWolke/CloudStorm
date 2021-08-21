@@ -42,16 +42,16 @@ class DiscordConnector extends EventEmitter {
 	public client: import("../Client");
 	public options: import("../Client")["options"];
 	public reconnect: boolean;
-	public betterWs: BetterWs | null;
-	public heartbeatTimeout: NodeJS.Timeout | null;
-	public heartbeatInterval: number;
-	public _trace: string | null;
-	public seq: number;
-	public status: string;
-	public sessionId: string | null;
-	public lastACKAt: number;
-	public lastHeartbeatSend: number;
-	public latency: number;
+	public betterWs: BetterWs | null = null;
+	public heartbeatTimeout: NodeJS.Timeout | null = null;
+	public heartbeatInterval = 0;
+	public _trace: string | null = null;
+	public seq = 0;
+	public status = "init";
+	public sessionId: string | null = null;
+	public lastACKAt = 0;
+	public lastHeartbeatSend = 0;
+	public latency = 0;
 
 	/**
 	 * Create a new Discord Connector.
@@ -65,16 +65,6 @@ class DiscordConnector extends EventEmitter {
 		this.client = client;
 		this.options = client.options;
 		this.reconnect = this.options.reconnect || true;
-		this.betterWs = null;
-		this.heartbeatTimeout = null;
-		this.heartbeatInterval = 0;
-		this._trace = null;
-		this.seq = 0;
-		this.status = "init";
-		this.sessionId = null;
-		this.lastACKAt = 0;
-		this.lastHeartbeatSend = 0;
-		this.latency = 0;
 	}
 
 	/**

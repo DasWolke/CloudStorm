@@ -6,7 +6,7 @@ Part of the WeatherStack
 
 CloudStorm is a small library specially made to **only** cover the Gateway area of the discord api.
 
-It makes no assumptions about the rest of your stack, therefore you can use it anywhere as long as you use node 8 or higher.
+It makes no assumptions about the rest of your stack, therefore you can use it anywhere as long as you use node 12 or higher.
 
 ### Some of the things that make CloudStorm awesome:
 - Standalone discord gateway connection
