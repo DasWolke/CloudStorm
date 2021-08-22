@@ -14,7 +14,8 @@
   "license": "MIT",
   "dependencies": {
     "snowtransfer": "github:AmandaDiscord/SnowTransfer",
-    "ws": "^8.2.0"
+    "ws": "^8.2.0",
+    "zlib-sync": "^0.1.7"
   },
   "devDependencies": {
     "@types/node": "16.7.1",
