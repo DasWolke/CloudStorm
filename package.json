@@ -1,32 +1,39 @@
 {
   "name": "cloudstorm",
-  "version": "0.2.6",
+  "version": "0.3.0",
   "description": "Minimalistic Discord Gateway library",
-  "main": "./dist/Client.js",
+  "main": "./dist/index.js",
   "engines": {
     "node": ">=12.0.0"
   },
-  "types": "./dist/Client.d.ts",
+  "types": "./dist/index.d.ts",
   "scripts": {
-    "build:src": "tsc -p ."
+    "build:src": "tsc -p .",
+    "build:docs": "typedoc --name CloudStorm --excludeExternals --sort static-first --sort alphabetical"
   },
   "author": "wolke <wolke@weeb.sh>",
   "license": "MIT",
   "dependencies": {
     "snowtransfer": "github:AmandaDiscord/SnowTransfer",
-    "ws": "^8.2.0",
+    "ws": "^8.2.3",
     "zlib-sync": "^0.1.7"
   },
   "devDependencies": {
     "@types/node": "16.7.1",
-    "@types/ws": "^7.4.7",
-    "@typescript-eslint/eslint-plugin": "^4.29.2",
-    "@typescript-eslint/parser": "^4.29.2",
+    "@types/ws": "^8.2.0",
+    "@typescript-eslint/eslint-plugin": "^4.32.0",
+    "@typescript-eslint/parser": "^4.32.0",
     "eslint": "^7.32.0",
-    "typescript": "^4.3.5"
+    "typedoc": "^0.22.5",
+    "typedoc-plugin-mdn-links": "^1.0.4",
+    "typedoc-plugin-missing-exports": "^0.22.3",
+    "typescript": "^4.4.3"
   },
   "optionalDependencies": {
     "erlpack": "github:discordapp/erlpack"
   },
-  "files": ["dist", "LICENSE"]
+  "files": [
+    "dist",
+    "README.md"
+  ]
 }

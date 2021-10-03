@@ -76,7 +76,7 @@ class BetterWs extends EventEmitter {
 		ws.on("message", (msg) => {
 			this.onMessage(msg as Buffer);
 		});
-		ws.on("close", (code, reason) => this.onClose(code, reason));
+		ws.on("close", (code, reason) => this.onClose(code, reason.toString()));
 		ws.on("error", (err) => {
 			this.emit("error", err);
 		});
