@@ -4,7 +4,7 @@ export interface IntentFlags {
 	GUILDS: number;
 	GUILD_MEMBERS: number;
 	GUILD_BANS: number;
-	GUILD_EMOJIS: number;
+	GUILD_EMOJIS_AND_STICKERS: number;
 	GUILD_INTEGRATIONS: number;
 	GUILD_WEBHOOKS: number;
 	GUILD_INVITES: number;

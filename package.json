@@ -14,7 +14,7 @@
   "author": "wolke <wolke@weeb.sh>",
   "license": "MIT",
   "dependencies": {
-    "snowtransfer": "github:AmandaDiscord/SnowTransfer",
+    "snowtransfer": "^0.3.x",
     "ws": "^8.2.3",
     "zlib-sync": "^0.1.7"
   },
@@ -34,6 +34,7 @@
   },
   "files": [
     "dist",
-    "README.md"
+    "README.md",
+    "LICENSE.md"
   ]
 }

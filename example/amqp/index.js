@@ -1,15 +1,16 @@
 "use strict";
-let CloudStorm = require("../../dist/Client");
-let token = require("../config.json").token;
-let bot = new CloudStorm(token, {
+const { Client } = require("../../");
+const token = require("../config.json").token;
+const bot = new Client(token, {
 	initialPresence: {status: "online", activities: [{name: "Wolking on Sunshine"}]},
+	intents: ["GUILDS"],
 	firstShardId: 0,
 	lastShardId: 0,
 	shardAmount: 1
 });
-let amqp = require("amqp");
-let startup = async () => {
-	let connection = amqp.createConnection({host: "localhost"});
+const amqp = require("amqp");
+const startup = async () => {
+	const connection = amqp.createConnection({host: "localhost"});
 	connection.on("error", (e) => {
 		console.error(e);
 	});

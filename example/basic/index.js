@@ -1,8 +1,8 @@
 "use strict";
-let CloudStorm = require("../../dist/Client");
-let token = require("../config.json").token;
-let bot = new CloudStorm(token);
-let startup = async () => {
+const { Client } = require("../../");
+const token = require("../config.json").token;
+const bot = new Client(token, { intents: ["GUILDS"] });
+const startup = async () => {
 	await bot.connect();
 	bot.on("event", (event) => {
 		// Do stuff with the received event ¯\_(ツ)_/¯
