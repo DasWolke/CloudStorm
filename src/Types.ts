@@ -53,6 +53,7 @@ export interface IClientOptions {
 	initialPresence?: IPresence;
 	intents?: IntentResolvable;
 	connectQueueInterval?: number;
+	snowtransferInstance?: import("snowtransfer").SnowTransfer;
 }
 
 export interface IVoiceStateUpdate {

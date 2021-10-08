@@ -9,7 +9,7 @@ try {
 	Erlpack = null;
 }
 import Constants from "./Constants";
-import SnowTransfer from "snowtransfer";
+import { SnowTransfer } from "snowtransfer";
 import ShardManager from "./ShardManager";
 
 interface ClientEvents {
@@ -46,7 +46,7 @@ interface Client {
  */
 class Client extends EventEmitter {
 	public token: string;
-	public options: import("./Types").IClientOptions & { token: string; endpoint?: string; };
+	public options: Omit<import("./Types").IClientOptions, "snowtransferInstance"> & { token: string; endpoint?: string; };
 	public shardManager: ShardManager;
 	public version: any;
 	private _restClient: SnowTransfer;
@@ -69,12 +69,13 @@ class Client extends EventEmitter {
 			intents: 0,
 			token: ""
 		};
+		this._restClient = options.snowtransferInstance ? options.snowtransferInstance : new SnowTransfer(token);
+		delete options.snowtransferInstance;
 		this.token = token.startsWith("Bot ") ? token.substring(4) : token;
 		Object.assign(this.options, options);
 		this.options.token = token;
 		this.shardManager = new ShardManager(this);
 		this.version = version;
-		this._restClient = new SnowTransfer(token);
 	}
 
 	/**

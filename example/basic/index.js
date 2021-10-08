@@ -1,5 +1,5 @@
 "use strict";
-const { Client } = require("../../");
+const { Client } = require("cloudstorm");
 const token = require("../config.json").token;
 const bot = new Client(token, { intents: ["GUILDS"] });
 const startup = async () => {
