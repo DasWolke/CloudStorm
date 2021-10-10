@@ -72,10 +72,10 @@ class DiscordConnector extends EventEmitter {
 	 */
 	public connect(): void {
 		if (!this.betterWs) {
-			this.betterWs = new BetterWs(this.options.endpoint as string);
+			this.betterWs = new BetterWs(this.options.endpoint as string, this.options.ws);
 		} else {
 			this.betterWs.removeAllListeners();
-			this.betterWs.recreateWs(this.options.endpoint as string);
+			this.betterWs.recreateWs(this.options.endpoint as string, this.options.ws);
 		}
 		this.betterWs.on("ws_open", () => {
 			this.status = "connecting";

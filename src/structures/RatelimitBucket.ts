@@ -4,7 +4,7 @@
  * RatelimitBucket, used for ratelimiting the execution of functions.
  */
 class RatelimitBucket {
-	public fnQueue: Array<{ fn: (...args: Array<any>) => any, callback: () => any }>;
+	public fnQueue: Array<{ fn: (...args: Array<any>) => any, callback: () => any; error: Error }>;
 	public limit: number;
 	public remaining: number;
 	public limitReset: number;
@@ -29,25 +29,38 @@ class RatelimitBucket {
 	 * @returns Result of the function if any.
 	 */
 	public queue(fn: (...args: Array<any>) => any): Promise<any> {
+		// More debug-ability
+		const error = new Error("An Error occurred in the bucket queue");
 		return new Promise((res, rej) => {
 			const wrapFn = () => {
 				this.remaining--;
 				if (!this.resetTimeout) {
-					this.resetTimeout = setTimeout(() => this.resetRemaining(), this.limitReset);
+					this.resetTimeout = setTimeout(() => {
+						try {
+							this.resetRemaining();
+						} catch (e) {
+							rej(e);
+						}
+					}, this.limitReset);
 				}
 				if (this.remaining !== 0) {
-					this.checkQueue();
+					this.checkQueue().catch(rej);
 				}
 				if (fn instanceof Promise) {
-					return fn.then(res).catch(rej);
+					return fn.then(res).catch((e) => {
+						if (e) {
+							e.stack = error.stack;
+							return rej(e);
+						} else return rej(error);
+					});
 				}
 				return res(fn());
 			};
 			if (this.remaining === 0) {
 				this.fnQueue.push({
-					fn, callback: wrapFn
+					fn, callback: wrapFn, error
 				});
-				this.checkQueue();
+				this.checkQueue().catch(rej);
 			} else {
 				wrapFn();
 			}
@@ -57,10 +70,17 @@ class RatelimitBucket {
 	/**
 	 * Check if there are any functions in the queue that haven't been executed yet.
 	 */
-	private checkQueue(): void {
+	private async checkQueue(): Promise<void> {
 		if (this.fnQueue.length > 0 && this.remaining !== 0) {
 			const queuedFunc = this.fnQueue.splice(0, 1)[0];
-			queuedFunc.callback();
+			try {
+				queuedFunc.callback();
+			} catch (e) {
+				if (e) {
+					e.stack = queuedFunc.error.stack;
+					throw e;
+				} else throw queuedFunc.error;
+			}
 		}
 	}
 

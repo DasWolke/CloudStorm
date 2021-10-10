@@ -54,6 +54,7 @@ export interface IClientOptions {
 	intents?: IntentResolvable;
 	connectQueueInterval?: number;
 	snowtransferInstance?: import("snowtransfer").SnowTransfer;
+	ws?: IClientWSOptions;
 }
 
 export interface IVoiceStateUpdate {
@@ -72,4 +73,9 @@ export interface IRequestGuildMembers {
 export interface IShardReady {
 	id: number;
 	ready: boolean;
+}
+
+export interface IClientWSOptions {
+	compress?: boolean;
+	socket?: import("ws").ClientOptions;
 }

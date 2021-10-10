@@ -67,7 +67,11 @@ class Client extends EventEmitter {
 			shardAmount: 1,
 			reconnect: true,
 			intents: 0,
-			token: ""
+			token: "",
+			ws: {
+				compress: true,
+				socket: undefined
+			}
 		};
 		this._restClient = options.snowtransferInstance ? options.snowtransferInstance : new SnowTransfer(token);
 		delete options.snowtransferInstance;
@@ -207,7 +211,7 @@ class Client extends EventEmitter {
 	 * @param gatewayUrl Base gateway wss url to update the cached endpoint to.
 	 */
 	private _updateEndpoint(gatewayUrl: string): void {
-		this.options.endpoint = `${gatewayUrl}?v=${Constants.GATEWAY_VERSION}&encoding=${Erlpack ? "etf" : "json"}&compress=zlib-stream`;
+		this.options.endpoint = `${gatewayUrl}?v=${Constants.GATEWAY_VERSION}&encoding=${Erlpack ? "etf" : "json"}${this.options.ws?.compress ? "&compress=zlib-stream" : ""}`;
 	}
 }
 

@@ -46,19 +46,24 @@ class BetterWs extends EventEmitter {
 	public ws: WebSocket;
 	public wsBucket: RatelimitBucket;
 	public presenceBucket: RatelimitBucket;
-	public zlibInflate: zlib.Inflate;
-	public options: WebSocket.ClientOptions;
+	public zlibInflate: zlib.Inflate | null = null;
+	public options: import("../Types").IClientWSOptions;
+	public compress: boolean;
 
 	/**
 	 * Create a new BetterWs instance.
 	 */
-	public constructor(address: string, options: import("ws").ClientOptions = {}) {
+	public constructor(address: string, options: import("../Types").IClientWSOptions = {}) {
 		super();
-		this.ws = new WebSocket(address, options);
+		this.ws = new WebSocket(address, options.socket);
 		this.bindWs(this.ws);
 		this.wsBucket = new RatelimitBucket(120, 60000);
 		this.presenceBucket = new RatelimitBucket(5, 20000);
-		this.zlibInflate = new zlib.Inflate({ chunkSize: 65535 });
+		if (options.compress) {
+			this.zlibInflate = new zlib.Inflate({ chunkSize: 65535 });
+			this.compress = true;
+		} else this.compress = false;
+		this.options = options;
 	}
 
 	/**
@@ -88,12 +93,19 @@ class BetterWs extends EventEmitter {
 	 * @param address Address to connect to.
 	 * @param options Options used by the websocket connection.
 	 */
-	public recreateWs(address: string, options: import("ws").ClientOptions = {}): void {
+	public recreateWs(address: string, options: import("../Types").IClientWSOptions = {}): void {
 		this.ws.removeAllListeners();
-		this.zlibInflate = new zlib.Inflate({ chunkSize: 65535 });
-		this.ws = new WebSocket(address, options);
+		if (options.compress) {
+			this.zlibInflate = new zlib.Inflate({ chunkSize: 65535 });
+			this.compress = true;
+		} else {
+			this.zlibInflate = null;
+			this.compress = false;
+		}
+		this.ws = new WebSocket(address, options.socket);
 		this.options = options;
 		this.wsBucket.dropQueue();
+		this.presenceBucket.dropQueue();
 		this.wsBucket = new RatelimitBucket(120, 60000);
 		this.presenceBucket = new RatelimitBucket(5, 60000);
 		this.bindWs(this.ws);
@@ -114,18 +126,22 @@ class BetterWs extends EventEmitter {
 	private onMessage(message: Buffer): void {
 		let parsed: IGatewayMessage;
 		try {
-			const length = message.length;
-			const flush = length >= 4 &&
-				message[length - 4] === 0x00 &&
-				message[length - 3] === 0x00 &&
-				message[length - 2] === 0xFF &&
-				message[length - 1] === 0xFF;
-			this.zlibInflate.push(message, flush ? zlib.Z_SYNC_FLUSH : false);
-			if (!flush) return;
+			let msg: Buffer;
+			if (this.compress && this.zlibInflate) {
+				const length = message.length;
+				const flush = length >= 4 &&
+					message[length - 4] === 0x00 &&
+					message[length - 3] === 0x00 &&
+					message[length - 2] === 0xFF &&
+					message[length - 1] === 0xFF;
+				this.zlibInflate.push(message, flush ? zlib.Z_SYNC_FLUSH : false);
+				if (!flush) return;
+				msg = this.zlibInflate.result as Buffer;
+			} else msg = message;
 			if (Erlpack) {
-				parsed = Erlpack.unpack(this.zlibInflate.result as Buffer);
+				parsed = Erlpack.unpack(msg);
 			} else {
-				parsed = JSON.parse(String(this.zlibInflate.result));
+				parsed = JSON.parse(String(msg));
 			}
 		} catch (e) {
 			this.emit("error", `Message: ${message} was not parseable`);
