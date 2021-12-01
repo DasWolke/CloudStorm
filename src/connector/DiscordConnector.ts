@@ -53,6 +53,8 @@ class DiscordConnector extends EventEmitter {
 	public lastHeartbeatSend = 0;
 	public latency = 0;
 
+	public static readonly default = DiscordConnector;
+
 	/**
 	 * Create a new Discord Connector.
 	 * @param id id of the shard that created this class.

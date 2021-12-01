@@ -1,6 +1,6 @@
 {
   "name": "cloudstorm",
-  "version": "0.3.1",
+  "version": "0.3.2",
   "description": "Minimalistic Discord Gateway library",
   "main": "./dist/index.js",
   "engines": {
@@ -15,19 +15,19 @@
   "license": "MIT",
   "dependencies": {
     "snowtransfer": "^0.3.x",
-    "ws": "^8.2.3",
+    "ws": "^8.3.0",
     "zlib-sync": "^0.1.7"
   },
   "devDependencies": {
     "@types/node": "16.7.1",
-    "@types/ws": "^8.2.0",
-    "@typescript-eslint/eslint-plugin": "^4.33.0",
-    "@typescript-eslint/parser": "^4.33.0",
-    "eslint": "^7.32.0",
-    "typedoc": "^0.22.5",
+    "@types/ws": "^8.2.1",
+    "@typescript-eslint/eslint-plugin": "^5.5.0",
+    "@typescript-eslint/parser": "^5.5.0",
+    "eslint": "^8.3.0",
+    "typedoc": "^0.22.10",
     "typedoc-plugin-mdn-links": "^1.0.4",
-    "typedoc-plugin-missing-exports": "^0.22.3",
-    "typescript": "^4.4.3"
+    "typedoc-plugin-missing-exports": "^0.22.6",
+    "typescript": "^4.5.2"
   },
   "optionalDependencies": {
     "erlpack": "github:discordapp/erlpack"

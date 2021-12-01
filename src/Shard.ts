@@ -38,6 +38,8 @@ class Shard extends EventEmitter {
 	public ready: boolean;
 	public connector: DiscordConnector;
 
+	public static readonly default = Shard;
+
 	/**
 	 * Create a new Shard.
 	 * @param id id of the shard.

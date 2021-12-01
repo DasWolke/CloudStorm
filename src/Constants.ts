@@ -46,5 +46,7 @@ export const GATEWAY_OP_CODES = {
 	 */
 	HEARTBEAT_ACK: 11 as const
 };
+
 export const GATEWAY_VERSION = 9;
-export default { GATEWAY_OP_CODES, GATEWAY_VERSION };
+
+export default exports as typeof import("./Constants");

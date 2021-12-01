@@ -15,6 +15,8 @@ class ShardManager {
 	public lastConnectionAttempt: number | null;
 	public connectQueueInterval: NodeJS.Timeout;
 
+	public static readonly default = ShardManager;
+
 	/**
 	 * Create a new ShardManager.
 	 */

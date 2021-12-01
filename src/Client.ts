@@ -51,6 +51,8 @@ class Client extends EventEmitter {
 	public version: any;
 	private _restClient: SnowTransfer;
 
+	public static readonly default = Client;
+
 	/**
 	 * Create a new Client to connect to the Discord gateway.
 	 * @param token Token received from creating a discord bot user, which will be used to connect to the gateway.

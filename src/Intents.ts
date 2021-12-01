@@ -1,25 +1,6 @@
 "use strict";
 
-/**
- * Numeric websocket intents. All available properties:
- * * `GUILDS`
- * * `GUILD_MEMBERS`
- * * `GUILD_BANS`
- * * `GUILD_EMOJIS_AND_STICKERS`
- * * `GUILD_INTEGRATIONS`
- * * `GUILD_WEBHOOKS`
- * * `GUILD_INVITES`
- * * `GUILD_VOICE_STATES`
- * * `GUILD_PRESENCES`
- * * `GUILD_MESSAGES`
- * * `GUILD_MESSAGE_REACTIONS`
- * * `GUILD_MESSAGE_TYPING`
- * * `DIRECT_MESSAGES`
- * * `DIRECT_MESSAGE_REACTIONS`
- * * `DIRECT_MESSAGE_TYPING`
- * @see {@link https://discord.com/developers/docs/topics/gateway#list-of-intents}
- */
-const flags = {
+export const flags = {
 	GUILDS: 1 << 0,
 	GUILD_MEMBERS: 1 << 1,
 	GUILD_BANS: 1 << 2,
@@ -37,39 +18,17 @@ const flags = {
 	DIRECT_MESSAGE_TYPING: 1 << 14,
 };
 
-/**
- * Bitfield representing all privileged intents.
- * @see {@link https://discord.com/developers/docs/topics/gateway#privileged-intents}
- */
-const privileged: number = flags.GUILD_MEMBERS | flags.GUILD_PRESENCES;
+export const privileged = flags.GUILD_MEMBERS | flags.GUILD_PRESENCES | flags.GUILD_MESSAGES;
 
-/**
- * Bitfield representing all intents combined.
- */
-const all: number = Object.values(flags).reduce((acc, p) => acc | p, 0);
+export const all = Object.values(flags).reduce((acc, p) => acc | p, 0);
 
-/**
- * Bitfield representing all non-privileged intents.
- */
-const non_privileged: number = all & ~privileged;
+export const non_privileged = all & ~privileged;
 
-/**
- * Resolves bitfields to their numeric form.
- * @param bit bit(s) to resolve.
- */
-function resolve(bit: import("./Types").IntentResolvable = 0): number {
+export function resolve(bit: import("./Types").IntentResolvable = 0): number {
 	if (typeof bit === "number" && bit >= 0) return bit;
 	if (typeof bit === "string" && flags[bit]) return flags[bit] | 0;
-	// @ts-ignore
 	if (Array.isArray(bit)) return bit.map((p: import("./Types").IntentResolvable) => resolve(p)).reduce((prev, p) => prev | p, 0);
 	throw new RangeError("BITFIELD_INVALID");
 }
 
-
-export = {
-	flags,
-	all,
-	privileged,
-	non_privileged,
-	resolve
-};
+export default exports as typeof import("./Intents");

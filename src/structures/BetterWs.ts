@@ -50,6 +50,8 @@ class BetterWs extends EventEmitter {
 	public options: import("../Types").IClientWSOptions;
 	public compress: boolean;
 
+	public static readonly default = BetterWs;
+
 	/**
 	 * Create a new BetterWs instance.
 	 */
