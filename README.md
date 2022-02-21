@@ -56,6 +56,6 @@ I've written a general whitepaper on the idea of microservice bots, which you ca
 You can find the docs at [https://daswolke.github.io/CloudStorm/](https://daswolke.github.io/CloudStorm/)
 
 ### Installation:
-To install CloudStorm, make sure that you have node 8 or higher and npm installed on your computer.
+To install CloudStorm, make sure that you have node 12 or higher and npm installed on your computer.
 
 Then run the following command in a terminal `npm install cloudstorm`

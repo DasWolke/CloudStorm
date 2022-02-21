@@ -1,5 +1,3 @@
-import Constants from "./Constants";
-
 export interface IntentFlags {
 	GUILDS: number;
 	GUILD_MEMBERS: number;
@@ -21,27 +19,14 @@ export interface IntentFlags {
 export type IntentResolvable = number | Array<number> | keyof IntentFlags | Array<keyof IntentFlags>;
 
 export interface IWSMessage {
-	op: typeof Constants["GATEWAY_OP_CODES"][keyof typeof Constants.GATEWAY_OP_CODES];
+	op: import("discord-typings").GatewayOpcode;
 	d?: any;
 	s?: number;
-	t?: string;
+	t?: import("discord-typings").GatewayEvent;
 }
 
 export interface IGatewayMessage extends IWSMessage {
 	shard_id: number;
-}
-
-export interface IPresenceActivity {
-	name: string;
-	type?: 0 | 1 | 2 | 3 | 5;
-	url?: string;
-}
-
-export interface IPresence {
-	status?: "online" | "idle" | "dnd" | "offline";
-	afk?: boolean;
-	since?: boolean;
-	activities?: Array<IPresenceActivity> | null;
 }
 
 export interface IClientOptions {
@@ -50,31 +35,12 @@ export interface IClientOptions {
 	lastShardId?: number;
 	shardAmount?: number;
 	reconnect?: boolean;
-	initialPresence?: IPresence;
+	initialPresence?: import("discord-typings").GatewayPresenceUpdate;
 	intents?: IntentResolvable;
 	connectQueueInterval?: number;
 	snowtransferInstance?: import("snowtransfer").SnowTransfer;
 	ws?: IClientWSOptions;
 }
-
-export interface IVoiceStateUpdate {
-	guild_id: string;
-	channel_id?: string | null;
-	self_mute?: boolean;
-	self_deaf?: boolean;
-}
-
-export interface IRequestGuildMembers {
-	guild_id: string;
-	query?: string | null;
-	limit?: number;
-}
-
-export interface IShardReady {
-	id: number;
-	ready: boolean;
-}
-
 export interface IClientWSOptions {
 	compress?: boolean;
 	socket?: import("ws").ClientOptions;

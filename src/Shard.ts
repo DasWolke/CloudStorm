@@ -109,7 +109,7 @@ class Shard extends EventEmitter {
 	 * Send an OP 3 PRESENCE_UPDATE to Discord.
 	 * @param data Data to send.
 	 */
-	public presenceUpdate(data: import("./Types").IPresence): Promise<void> {
+	public presenceUpdate(data: import("discord-typings").GatewayPresenceUpdate): Promise<void> {
 		return this.connector.presenceUpdate(data);
 	}
 
@@ -117,7 +117,7 @@ class Shard extends EventEmitter {
 	 * Send an OP 4 VOICE_STATE_UPDATE to Discord.
 	 * @param data Data to send
 	 */
-	public voiceStateUpdate(data: import("./Types").IVoiceStateUpdate): Promise<void> {
+	public voiceStateUpdate(data: import("discord-typings").VoiceStateUpdatePayload & { self_deaf?: boolean; self_mute?: boolean; }): Promise<void> {
 		return this.connector.voiceStateUpdate(data);
 	}
 
@@ -125,7 +125,7 @@ class Shard extends EventEmitter {
 	 * Send an OP 8 REQUEST_GUILD_MEMBERS to Discord.
 	 * @param data Data to send.
 	 */
-	public requestGuildMembers(data: import("./Types").IRequestGuildMembers): Promise<void> {
+	public requestGuildMembers(data: import("discord-typings").GuildRequestMembersPayload & { limit?: number; }): Promise<void> {
 		return this.connector.requestGuildMembers(data);
 	}
 }

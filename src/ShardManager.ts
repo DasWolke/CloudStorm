@@ -158,7 +158,7 @@ class ShardManager {
 	 * Update the status of all currently connected shards which have been spawned by this manager.
 	 * @param data Data to send.
 	 */
-	public async presenceUpdate(data: import("./Types").IPresence = {}) {
+	public async presenceUpdate(data: import("discord-typings").GatewayPresenceUpdate) {
 		for (const shardKey in this.shards) {
 			if (this.shards[shardKey]) {
 				const shard = this.shards[shardKey];
@@ -172,7 +172,7 @@ class ShardManager {
 	 * @param shardId id of the shard.
 	 * @param data Data to send.
 	 */
-	public shardPresenceUpdate(shardId: number, data: import("./Types").IPresence = {}): Promise<void> {
+	public shardPresenceUpdate(shardId: number, data: import("discord-typings").GatewayPresenceUpdate): Promise<void> {
 		return new Promise((res, rej) => {
 			const shard = this.shards[shardId];
 			if (!shard) {
@@ -192,7 +192,7 @@ class ShardManager {
 	 * @param shardId id of the shard.
 	 * @param data Data to send.
 	 */
-	public voiceStateUpdate(shardId: number, data: import("./Types").IVoiceStateUpdate): Promise<void> {
+	public voiceStateUpdate(shardId: number, data: import("discord-typings").VoiceStateUpdatePayload & { self_deaf?: boolean; self_mute?: boolean; }): Promise<void> {
 		return new Promise((res, rej) => {
 			const shard = this.shards[shardId];
 			if (!shard) {
@@ -212,7 +212,7 @@ class ShardManager {
 	 * @param shardId id of the shard.
 	 * @param data Data to send.
 	 */
-	public requestGuildMembers(shardId: number, data: import("./Types").IRequestGuildMembers): Promise<void> {
+	public requestGuildMembers(shardId: number, data: import("discord-typings").GuildRequestMembersPayload & { limit?: number; }): Promise<void> {
 		return new Promise((res, rej) => {
 			const shard = this.shards[shardId];
 			if (!shard) {

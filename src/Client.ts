@@ -1,6 +1,6 @@
 "use strict";
 
-const version = require("../package.json").version;
+const version = require("../package.json").version as string;
 import { EventEmitter } from "events";
 let Erlpack: typeof import("erlpack") | null;
 try {
@@ -48,7 +48,7 @@ class Client extends EventEmitter {
 	public token: string;
 	public options: Omit<import("./Types").IClientOptions, "snowtransferInstance"> & { token: string; endpoint?: string; };
 	public shardManager: ShardManager;
-	public version: any;
+	public version: string;
 	private _restClient: SnowTransfer;
 
 	public static readonly default = Client;
@@ -89,8 +89,8 @@ class Client extends EventEmitter {
 	 * @returns This function returns a promise which is solely used for awaiting the getGateway() method's return value.
 	 */
 	public async connect(): Promise<void> {
-		const gatewayUrl = await this.getGateway();
-		this._updateEndpoint(gatewayUrl);
+		const gateway = await this.getGateway();
+		this._updateEndpoint(gateway);
 		this.shardManager.spawn();
 	}
 
@@ -107,7 +107,7 @@ class Client extends EventEmitter {
 	 * Get the GatewayData including recommended amount of shards.
 	 * @returns Object with url and shards to use to connect to discord.
 	 */
-	public async getGatewayBot(): Promise<any> {
+	public async getGatewayBot() {
 		return this._restClient.bot.getGatewayBot();
 	}
 
@@ -134,7 +134,7 @@ class Client extends EventEmitter {
 	 * 	client.presenceUpdate({ status: "dnd", game: { name: "Memes are Dreams" } });
 	 * });
 	 */
-	public async presenceUpdate(data: import("./Types").IPresence): Promise<void> {
+	public async presenceUpdate(data: import("discord-typings").GatewayPresenceUpdate): Promise<void> {
 		await this.shardManager.presenceUpdate(data);
 		void undefined;
 	}
@@ -156,7 +156,7 @@ class Client extends EventEmitter {
 	 * 	client.shardPresenceUpdate(0, { status: "dnd", game: { name: "Im shard 0" } });
 	 * });
 	 */
-	public shardStatusUpdate(shardId: number, data: import("./Types").IPresence): Promise<void> {
+	public shardStatusUpdate(shardId: number, data: import("discord-typings").GatewayPresenceUpdate): Promise<void> {
 		return this.shardManager.shardPresenceUpdate(shardId, data);
 	}
 
@@ -179,7 +179,7 @@ class Client extends EventEmitter {
 	 * 	client.voiceStateUpdate(0, { guild_id: "id", channel_id: "id", self_mute: false, self_deaf: false });
 	 * });
 	 */
-	public voiceStateUpdate(shardId: number, data: import("./Types").IVoiceStateUpdate): Promise<void> {
+	public voiceStateUpdate(shardId: number, data: import("discord-typings").VoiceStateUpdatePayload & { self_deaf?: boolean; self_mute?: boolean; }): Promise<void> {
 		return this.shardManager.voiceStateUpdate(shardId, data);
 	}
 
@@ -201,7 +201,7 @@ class Client extends EventEmitter {
 	 * 	client.requestGuildMembers(0, { guild_id: "id" });
 	 * });
 	 */
-	public requestGuildMembers(shardId: number, data: import("./Types").IRequestGuildMembers): Promise<void> {
+	public requestGuildMembers(shardId: number, data: import("discord-typings").GuildRequestMembersPayload & { limit?: number; }): Promise<void> {
 		if (!data.guild_id) {
 			throw new Error("You need to pass a guild_id");
 		}

@@ -230,7 +230,7 @@ class DiscordConnector extends EventEmitter {
 				large_threshold: this.options.largeGuildThreshold,
 				shard: [this.id, this.options.shardAmount],
 				intents: this.options.intents ? Intents.resolve(this.options.intents) : 0
-			}
+			} as import("discord-typings").IdentifyPayload
 		};
 
 		if (this.options.initialPresence) Object.assign(data.d, { presence: this._checkPresenceData(this.options.initialPresence) });
@@ -394,7 +394,7 @@ class DiscordConnector extends EventEmitter {
 	 * Send an OP 3 PRESENCE_UPDATE to the gateway.
 	 * @param data Presence data to send.
 	 */
-	public async presenceUpdate(data: import("../Types").IPresence = {}): Promise<void> {
+	public async presenceUpdate(data: import("discord-typings").GatewayPresenceUpdate): Promise<void> {
 		return this.betterWs?.sendMessage({ op: OP.PRESENCE_UPDATE, d: this._checkPresenceData(data) });
 	}
 
@@ -402,7 +402,7 @@ class DiscordConnector extends EventEmitter {
 	 * Send an OP 4 VOICE_STATE_UPDATE to the gateway.
 	 * @param data Voice state update data to send.
 	 */
-	public async voiceStateUpdate(data: import("../Types").IVoiceStateUpdate): Promise<void> {
+	public async voiceStateUpdate(data: import("discord-typings").VoiceStateUpdatePayload & { self_deaf?: boolean; self_mute?: boolean; }): Promise<void> {
 		if (!data) {
 			return Promise.resolve();
 		}
@@ -413,7 +413,7 @@ class DiscordConnector extends EventEmitter {
 	 * Send an OP 8 REQUEST_GUILD_MEMBERS to the gateway.
 	 * @param data Data to send.
 	 */
-	public async requestGuildMembers(data: import("../Types").IRequestGuildMembers): Promise<void> {
+	public async requestGuildMembers(data: import("discord-typings").GuildRequestMembersPayload & { limit?: number; }): Promise<void> {
 		return this.betterWs?.sendMessage({ op: OP.REQUEST_GUILD_MEMBERS, d: this._checkRequestGuildMembersData(data) });
 	}
 
@@ -422,9 +422,9 @@ class DiscordConnector extends EventEmitter {
 	 * @param data Data to send.
 	 * @returns Data after it's fixed/checked.
 	 */
-	private _checkPresenceData(data: import("../Types").IPresence): import("../Types").IPresence {
+	private _checkPresenceData(data: import("discord-typings").GatewayPresenceUpdate): import("discord-typings").GatewayPresenceUpdate {
 		data.status = data.status || "online";
-		data.activities = data.activities && Array.isArray(data.activities) ? data.activities : null;
+		data.activities = data.activities && Array.isArray(data.activities) ? data.activities : [];
 
 		if (data.activities) {
 			for (const activity of data.activities) {
@@ -435,7 +435,7 @@ class DiscordConnector extends EventEmitter {
 		}
 
 		data.afk = data.afk || false;
-		data.since = data.since || false;
+		data.since = data.since || Date.now();
 		return data;
 	}
 
@@ -444,7 +444,7 @@ class DiscordConnector extends EventEmitter {
 	 * @param data Data to send.
 	 * @returns Data after it's fixed/checked.
 	 */
-	private _checkVoiceStateUpdateData(data: import("../Types").IVoiceStateUpdate): import("../Types").IVoiceStateUpdate {
+	private _checkVoiceStateUpdateData(data: import("discord-typings").VoiceStateUpdatePayload & { self_deaf?: boolean; self_mute?: boolean; }): import("discord-typings").VoiceStateUpdatePayload {
 		data.channel_id = data.channel_id || null;
 		data.self_mute = data.self_mute || false;
 		data.self_deaf = data.self_deaf || false;
@@ -456,7 +456,7 @@ class DiscordConnector extends EventEmitter {
 	 * @param data Data to send.
 	 * @returns Data after it's fixed/checked.
 	 */
-	private _checkRequestGuildMembersData(data: import("../Types").IRequestGuildMembers): import("../Types").IRequestGuildMembers {
+	private _checkRequestGuildMembersData(data: import("discord-typings").GuildRequestMembersPayload & { limit?: number; }) {
 		data.query = data.query || "";
 		data.limit = data.limit || 0;
 		return data;
