@@ -19,7 +19,7 @@ export const flags = {
 	MESSAGE_CONTENT: 1 << 15,
 };
 
-export const privileged = flags.GUILD_MEMBERS | flags.GUILD_PRESENCES | flags.GUILD_MESSAGES;
+export const privileged = flags.GUILD_MEMBERS | flags.GUILD_PRESENCES | flags.GUILD_MESSAGES | flags.MESSAGE_CONTENT;
 
 export const all = Object.values(flags).reduce((acc, p) => acc | p, 0);
 
