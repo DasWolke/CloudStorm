@@ -2,12 +2,6 @@
 
 const version = require("../package.json").version as string;
 import { EventEmitter } from "events";
-let Erlpack: typeof import("erlpack") | null;
-try {
-	Erlpack = require("erlpack");
-} catch (e) {
-	Erlpack = null;
-}
 import Constants from "./Constants";
 import { SnowTransfer } from "snowtransfer";
 import ShardManager from "./ShardManager";
@@ -59,9 +53,7 @@ class Client extends EventEmitter {
 	 */
 	public constructor(token: string, options: import("./Types").IClientOptions = {}) {
 		super();
-		if (!token) {
-			throw new Error("Missing token!");
-		}
+		if (!token) throw new Error("Missing token!");
 		this.options = {
 			largeGuildThreshold: 250,
 			firstShardId: 0,
@@ -72,7 +64,7 @@ class Client extends EventEmitter {
 			token: "",
 			ws: {
 				compress: true,
-				socket: undefined
+				encoding: "json"
 			}
 		};
 		this._restClient = options.snowtransferInstance ? options.snowtransferInstance : new SnowTransfer(token);
@@ -135,8 +127,7 @@ class Client extends EventEmitter {
 	 * });
 	 */
 	public async presenceUpdate(data: import("discord-typings").GatewayPresenceUpdate): Promise<void> {
-		await this.shardManager.presenceUpdate(data);
-		void undefined;
+		return this.shardManager.presenceUpdate(data);
 	}
 
 	/**
@@ -202,9 +193,7 @@ class Client extends EventEmitter {
 	 * });
 	 */
 	public requestGuildMembers(shardId: number, data: import("discord-typings").GuildRequestMembersPayload & { limit?: number; }): Promise<void> {
-		if (!data.guild_id) {
-			throw new Error("You need to pass a guild_id");
-		}
+		if (!data.guild_id) throw new Error("You need to pass a guild_id");
 		return this.shardManager.requestGuildMembers(shardId, data);
 	}
 
@@ -213,7 +202,7 @@ class Client extends EventEmitter {
 	 * @param gatewayUrl Base gateway wss url to update the cached endpoint to.
 	 */
 	private _updateEndpoint(gatewayUrl: string): void {
-		this.options.endpoint = `${gatewayUrl}?v=${Constants.GATEWAY_VERSION}&encoding=${Erlpack ? "etf" : "json"}${this.options.ws?.compress ? "&compress=zlib-stream" : ""}`;
+		this.options.endpoint = `${gatewayUrl}?v=${Constants.GATEWAY_VERSION}&encoding=${this.options.ws?.encoding === "etf" ? "etf" : "json"}${this.options.ws?.compress ? "&compress=zlib-stream" : ""}`;
 	}
 }
 

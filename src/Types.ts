@@ -43,5 +43,5 @@ export interface IClientOptions {
 }
 export interface IClientWSOptions {
 	compress?: boolean;
-	socket?: import("ws").ClientOptions;
+	encoding?: "etf" | "json";
 }

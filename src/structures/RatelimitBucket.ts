@@ -45,9 +45,8 @@ class RatelimitBucket {
 						}
 					}, this.limitReset);
 				}
-				if (this.remaining !== 0) {
-					this.checkQueue().catch(rej);
-				}
+				if (this.remaining !== 0) this.checkQueue().catch(rej);
+
 				if (fn instanceof Promise) {
 					return fn.then(res).catch((e) => {
 						if (e) {
@@ -59,13 +58,9 @@ class RatelimitBucket {
 				return res(fn());
 			};
 			if (this.remaining === 0) {
-				this.fnQueue.push({
-					fn, callback: wrapFn, error
-				});
+				this.fnQueue.push({ fn, callback: wrapFn, error });
 				this.checkQueue().catch(rej);
-			} else {
-				wrapFn();
-			}
+			} else wrapFn();
 		});
 	}
 

@@ -23,9 +23,7 @@ class ShardManager {
 	public constructor(client: import("./Client")) {
 		this.client = client;
 		this.options = client.options;
-		if (!this.options.connectQueueInterval) {
-			this.options.connectQueueInterval = 1000 * 5;
-		}
+		if (!this.options.connectQueueInterval) this.options.connectQueueInterval = 1000 * 5;
 		this.shards = {};
 		this.connectQueue = [];
 		this.lastConnectionAttempt = null;
@@ -105,9 +103,6 @@ class ShardManager {
 			this.client.emit("shardReady", { id: shard.id, ready: !resume });
 			this._checkReady();
 		});
-		shard.on("error", (error) => {
-			this.client.emit("error", error);
-		});
 
 		shard.on("disconnect", (code, reason, gracefulClose) => {
 			this.client.emit("debug", `Websocket of shard ${shard.id} closed with code ${code} and reason: ${reason ? reason : "None"}`);
@@ -132,9 +127,7 @@ class ShardManager {
 	private _checkReady() {
 		for (const shardId in this.shards) {
 			if (this.shards[shardId]) {
-				if (!this.shards[shardId].ready) {
-					return;
-				}
+				if (!this.shards[shardId].ready) return;
 			}
 		}
 		this.client.emit("ready");
@@ -146,9 +139,7 @@ class ShardManager {
 	private _checkDisconnect() {
 		for (const shardId in this.shards) {
 			if (this.shards[shardId]) {
-				if (this.shards[shardId].connector.status !== "disconnected") {
-					return;
-				}
+				if (this.shards[shardId].connector.status !== "disconnected") return;
 			}
 		}
 		this.client.emit("disconnected");
@@ -175,14 +166,8 @@ class ShardManager {
 	public shardPresenceUpdate(shardId: number, data: import("discord-typings").GatewayPresenceUpdate): Promise<void> {
 		return new Promise((res, rej) => {
 			const shard = this.shards[shardId];
-			if (!shard) {
-				rej(new Error(`Shard ${shardId} does not exist`));
-			}
-			if (!shard.ready) {
-				shard.once("ready", () => {
-					shard.presenceUpdate(data).then(result => res(result)).catch(e => rej(e));
-				});
-			}
+			if (!shard) rej(new Error(`Shard ${shardId} does not exist`));
+			if (!shard.ready) shard.once("ready", () => shard.presenceUpdate(data).then(result => res(result)).catch(e => rej(e)));
 			shard.presenceUpdate(data).then(result => res(result)).catch(e => rej(e));
 		});
 	}
@@ -195,14 +180,8 @@ class ShardManager {
 	public voiceStateUpdate(shardId: number, data: import("discord-typings").VoiceStateUpdatePayload & { self_deaf?: boolean; self_mute?: boolean; }): Promise<void> {
 		return new Promise((res, rej) => {
 			const shard = this.shards[shardId];
-			if (!shard) {
-				rej(new Error(`Shard ${shardId} does not exist`));
-			}
-			if (!shard.ready) {
-				shard.once("ready", () => {
-					shard.voiceStateUpdate(data).then(result => res(result)).catch(e => rej(e));
-				});
-			}
+			if (!shard) rej(new Error(`Shard ${shardId} does not exist`));
+			if (!shard.ready) shard.once("ready", () => shard.voiceStateUpdate(data).then(result => res(result)).catch(e => rej(e)));
 			shard.voiceStateUpdate(data).then(result => res(result)).catch(e => rej(e));
 		});
 	}
@@ -215,14 +194,8 @@ class ShardManager {
 	public requestGuildMembers(shardId: number, data: import("discord-typings").GuildRequestMembersPayload & { limit?: number; }): Promise<void> {
 		return new Promise((res, rej) => {
 			const shard = this.shards[shardId];
-			if (!shard) {
-				rej(new Error(`Shard ${shardId} does not exist`));
-			}
-			if (!shard.ready) {
-				shard.once("ready", () => {
-					shard.requestGuildMembers(data).then(result => res(result)).catch(e => rej(e));
-				});
-			}
+			if (!shard) rej(new Error(`Shard ${shardId} does not exist`));
+			if (!shard.ready) shard.once("ready", () => shard.requestGuildMembers(data).then(result => res(result)).catch(e => rej(e)));
 			shard.requestGuildMembers(data).then(result => res(result)).catch(e => rej(e));
 		});
 	}

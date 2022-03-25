@@ -17,9 +17,7 @@ const { Client } = require("cloudstorm");
 const bot = new Client(token, { intents: ["GUILDS"] });
 const startup = async () => {
 	await bot.connect();
-	bot.on("ready", () => {
-		console.log("Bot received ready event");
-	});
+	bot.on("ready", () => console.log("Bot received ready event"););
 };
 startup().catch(e => {
 	console.error("Error on startup!");
@@ -44,7 +42,7 @@ So an event you receive may look like this:
 		"roles": [],
 		"status": "offline",
 		"user": {
-		"id": "id"
+			"id": "id"
 		}
 	}
 }

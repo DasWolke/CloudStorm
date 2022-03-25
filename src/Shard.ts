@@ -6,7 +6,6 @@ import { GATEWAY_OP_CODES as OP_CODES } from "./Constants";
 
 interface ShardEvents {
 	disconnect: [number, string, boolean];
-	error: [string];
 	ready: [boolean];
 	queueIdentify: [number];
 }
@@ -73,15 +72,8 @@ class Shard extends EventEmitter {
 			this.ready = false;
 			this.emit("disconnect", ...args);
 		});
-		this.connector.on("error", (err) => {
-			this.emit("error", err);
-		});
-		this.connector.on("ready", (resume) => {
-			this.emit("ready", resume);
-		});
-		this.connector.on("queueIdentify", () => {
-			this.emit("queueIdentify", this.id);
-		});
+		this.connector.on("ready", (resume) => this.emit("ready", resume));
+		this.connector.on("queueIdentify", () => this.emit("queueIdentify", this.id));
 	}
 
 	/**
