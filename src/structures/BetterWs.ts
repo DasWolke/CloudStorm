@@ -1,5 +1,9 @@
 "use strict";
 
+// This ultra light weigth WS code is a slimmed down version originally found at https://github.com/timotejroiko/tiny-discord
+// Modifications and use of this code was granted for this project by the author, Timotej Roiko.
+// A major thank you to Tim for better performing software.
+
 import { EventEmitter } from "events";
 import { randomBytes, createHash } from "crypto";
 import { createInflate, inflateSync, constants } from "zlib";

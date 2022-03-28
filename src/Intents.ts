@@ -17,9 +17,10 @@ export const flags = {
 	DIRECT_MESSAGE_REACTIONS: 1 << 13,
 	DIRECT_MESSAGE_TYPING: 1 << 14,
 	MESSAGE_CONTENT: 1 << 15,
+	GUILD_SCHEDULED_EVENTS: 1 >> 16
 };
 
-export const privileged = flags.GUILD_MEMBERS | flags.GUILD_PRESENCES | flags.GUILD_MESSAGES | flags.MESSAGE_CONTENT;
+export const privileged = flags.GUILD_MEMBERS | flags.GUILD_PRESENCES | flags.MESSAGE_CONTENT;
 
 export const all = Object.values(flags).reduce((acc, p) => acc | p, 0);
 
