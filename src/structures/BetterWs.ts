@@ -132,14 +132,15 @@ class BetterWs extends EventEmitter {
 		});
 	}
 
-	public async close(): Promise<void> {
+	public async close(code: number, reason?: string): Promise<void> {
 		const internal = this._internal;
 		if (internal.closePromise) return internal.closePromise;
 		if (!this._socket) return Promise.resolve(void 0);
 		let resolver: ((value: unknown) => void) | undefined;
 		const promise = new Promise(resolve => {
 			resolver = resolve;
-			this._write(Buffer.allocUnsafe(0), 8);
+			const from = Buffer.from([code >> 8, code & 255]);
+			this._write(reason ? Buffer.concat([from, Buffer.from(reason)]) : from, 8);
 		}).then(() => {
 			internal.closePromise = null;
 		});

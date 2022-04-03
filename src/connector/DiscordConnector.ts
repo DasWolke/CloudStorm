@@ -51,6 +51,7 @@ class DiscordConnector extends EventEmitter {
 	public lastACKAt = 0;
 	public lastHeartbeatSend = 0;
 	public latency = 0;
+	private _closing = false;
 
 	public static readonly default = DiscordConnector;
 
@@ -84,6 +85,7 @@ class DiscordConnector extends EventEmitter {
 	 * Connect to Discord.
 	 */
 	public connect(): Promise<void> {
+		this._closing = false;
 		return this.betterWs.connect();
 	}
 
@@ -91,7 +93,8 @@ class DiscordConnector extends EventEmitter {
 	 * Close the websocket connection and disconnect.
 	 */
 	public async disconnect(): Promise<void> {
-		return this.betterWs.close();
+		this._closing = true;
+		return this.betterWs.close(1000, "Disconnected by User");
 	}
 
 	/**
@@ -166,7 +169,7 @@ class DiscordConnector extends EventEmitter {
 	private async _reconnect(resume = false): Promise<void> {
 		if (resume) reconnecting = true;
 		if (this.betterWs.status === 2) void this.client.emit("error", `Client was attempting to ${resume ? "resume" : "reconnect"} while the WebSocket was still in the connecting state. This should never happen.`);
-		await this.betterWs.close();
+		await this.betterWs.close(resume ? 4000 : 1012, "reconnecting");
 		if (resume) this.clearHeartBeat();
 		else this.reset();
 		this.connect();
@@ -354,7 +357,8 @@ class DiscordConnector extends EventEmitter {
 		}
 
 		// Don't try to reconnect when true
-		if (code === 1000 && reason === "Disconnected by User") gracefulClose = true;
+		if (code === 1000 && this._closing) gracefulClose = true;
+		this._closing = false;
 
 		if (gracefulClose) {
 			this.clearHeartBeat();
