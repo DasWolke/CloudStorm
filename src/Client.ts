@@ -5,6 +5,7 @@ import { EventEmitter } from "events";
 import Constants from "./Constants";
 import { SnowTransfer } from "snowtransfer";
 import ShardManager from "./ShardManager";
+import RatelimitBucket from "./structures/RatelimitBucket";
 
 interface ClientEvents {
 	debug: [string];
@@ -56,9 +57,7 @@ class Client extends EventEmitter {
 		if (!token) throw new Error("Missing token!");
 		this.options = {
 			largeGuildThreshold: 250,
-			firstShardId: 0,
-			lastShardId: 0,
-			shardAmount: 1,
+			shards: "auto",
 			reconnect: true,
 			intents: 0,
 			token: "",
@@ -81,9 +80,38 @@ class Client extends EventEmitter {
 	 * @returns This function returns a promise which is solely used for awaiting the getGateway() method's return value.
 	 */
 	public async connect(): Promise<void> {
-		const gateway = await this.getGateway();
-		this._updateEndpoint(gateway);
+		const initial = await this.fetchConnectInfo();
+		if (this.options.shards === "auto") this.options.totalShards = initial;
 		this.shardManager.spawn();
+	}
+
+	/**
+	 * Method to grab initial connection info from Discord.
+	 * Should only be called automatically by the lib unless you are a large bot with a max_concurrency not equal to 1.
+	 * If you are a large bot, you should call this method at a rate of your own discretion to update your max_concurrency cached value to have up to date bucket info.
+	 * @returns The amount of shards the bot should spawn if set to auto.
+	 */
+	public async fetchConnectInfo(): Promise<number> {
+		const gateway = await this.getGatewayBot();
+		this._updateEndpoint(gateway.url);
+		const oldQueueConcurrency = [] as Array<[() => unknown, () => unknown]>;
+		const oldQueueIdentify = [] as Array<[() => unknown, () => unknown]>;
+		if (this.shardManager.concurrencyBucket && this.shardManager.concurrencyBucket.fnQueue.length) {
+			oldQueueConcurrency.push(...this.shardManager.concurrencyBucket.fnQueue.map(i => [i.fn, i.callback] as [() => unknown, () => unknown]));
+			this.shardManager.concurrencyBucket.dropQueue();
+		}
+		if (this.shardManager.identifyBucket.fnQueue.length) oldQueueIdentify.push(...this.shardManager.identifyBucket.fnQueue.map(i => [i.fn, i.callback] as [() => unknown, () => unknown]));
+		this.shardManager.identifyBucket.dropQueue();
+		this.shardManager.concurrencyBucket = new RatelimitBucket(gateway.session_start_limit.max_concurrency, 5000);
+		this.shardManager.identifyBucket.remaining = gateway.session_start_limit.remaining;
+		this.shardManager.identifyBucket.limitReset = gateway.session_start_limit.reset_after;
+		for (const [fn, callback] of oldQueueConcurrency) {
+			this.shardManager.concurrencyBucket.queue(fn).then(callback);
+		}
+		for (const [fn, callback] of oldQueueIdentify) {
+			this.shardManager.identifyBucket.queue(fn).then(callback);
+		}
+		return gateway.shards;
 	}
 
 	/**
@@ -96,7 +124,7 @@ class Client extends EventEmitter {
 	}
 
 	/**
-	 * Get the GatewayData including recommended amount of shards.
+	 * Get the GatewayData including recommended amount of shards and other helpful info.
 	 * @returns Object with url and shards to use to connect to discord.
 	 */
 	public async getGatewayBot() {

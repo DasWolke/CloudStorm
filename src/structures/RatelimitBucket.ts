@@ -4,10 +4,11 @@
  * RatelimitBucket, used for ratelimiting the execution of functions.
  */
 class RatelimitBucket {
-	public fnQueue: Array<{ fn: (...args: Array<any>) => any, callback: () => any; error: Error }>;
+	public fnQueue: Array<{ fn: () => unknown, callback: () => unknown; error: Error }>;
 	public limit: number;
 	public remaining: number;
 	public limitReset: number;
+	public defaultReset: number | undefined;
 	public resetTimeout: NodeJS.Timeout | null;
 
 	public static readonly default = RatelimitBucket;
@@ -16,13 +17,16 @@ class RatelimitBucket {
 	 * Create a new Bucket.
 	 * @param limit Number of functions that may be executed during the timeframe set in limitReset.
 	 * @param limitReset Timeframe in milliseconds until the ratelimit resets.
+	 * @param defaultLimit If the bucket info does not provide default values, but provides remaining, this is the limit to use after the initial reset.
+	 * @param defaultReset If the bucket info does not provide default values, but provides remaining, this is the reset to use after the initial reset.
 	 */
-	public constructor(limit = 5, limitReset = 5000) {
+	public constructor(limit = 5, limitReset = 5000, defaultReset?: number) {
 		this.fnQueue = [];
 		this.limit = limit;
 		this.remaining = limit;
 		this.limitReset = limitReset;
 		this.resetTimeout = null;
+		this.defaultReset = defaultReset;
 	}
 
 	/**
@@ -30,7 +34,7 @@ class RatelimitBucket {
 	 * @param fn Function to be executed.
 	 * @returns Result of the function if any.
 	 */
-	public queue(fn: (...args: Array<any>) => any): Promise<any> {
+	public queue<T>(fn: () => T): Promise<T> {
 		// More debug-ability
 		const error = new Error("An Error occurred in the bucket queue");
 		return new Promise((res, rej) => {
@@ -86,6 +90,7 @@ class RatelimitBucket {
 	 */
 	private resetRemaining(): void {
 		this.remaining = this.limit;
+		if (this.defaultReset) this.limitReset = this.defaultReset;
 		if (this.resetTimeout) {
 			clearTimeout(this.resetTimeout);
 			this.resetTimeout = null;

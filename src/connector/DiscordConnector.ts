@@ -138,6 +138,7 @@ class DiscordConnector extends EventEmitter {
 			break;
 
 		case OP.HELLO:
+			this.client.emit("debug", `Shard ${this.id} received HELLO`);
 			this.heartbeat();
 			this.heartbeatInterval = message.d.heartbeat_interval;
 			this.heartbeatTimeout = setInterval(() => {
@@ -148,8 +149,7 @@ class DiscordConnector extends EventEmitter {
 				} else this.heartbeat();
 			}, this.heartbeatInterval);
 			this._trace = message.d._trace;
-			this.identify();
-			this.client.emit("debug", `Shard ${this.id} received HELLO`);
+			this.emit("queueIdentify", this.id);
 			break;
 
 		case OP.HEARTBEAT_ACK:
@@ -202,6 +202,7 @@ class DiscordConnector extends EventEmitter {
 	public async identify(force?: boolean): Promise<void> {
 		if (this.betterWs.status !== 1) void this.client.emit("debug", "Client was attempting to identify when the ws was not open");
 		if (this.sessionId && !force) return this.resume();
+		this.client.emit("debug", `Shard ${this.id} is identifying`);
 
 		this.status = "identifying";
 		this.emit("stateChange", "identifying");
@@ -216,7 +217,7 @@ class DiscordConnector extends EventEmitter {
 					$device: "CloudStorm"
 				},
 				large_threshold: this.options.largeGuildThreshold,
-				shard: [this.id, this.options.shardAmount],
+				shard: [this.id, this.options.totalShards || 1],
 				intents: this.options.intents ? Intents.resolve(this.options.intents) : 0
 			} as import("discord-typings").IdentifyPayload
 		};
@@ -231,6 +232,7 @@ class DiscordConnector extends EventEmitter {
 	 */
 	private async resume(): Promise<void> {
 		if (this.betterWs.status !== 1) void this.client.emit("debug", "Client was attempting to resume when the ws was not open");
+		this.client.emit("debug", `Shard ${this.id} is resuming`);
 		this.status = "resuming";
 		this.emit("stateChange", "resuming");
 		return this.betterWs.sendMessage({

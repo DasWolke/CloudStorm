@@ -47,6 +47,12 @@ So an event you receive may look like this:
 	}
 }
 ```
+
+## Sharding for VERY large bots
+CloudStorm supports max_concurrency, but does not automatically attempt to fetch new info related to max_concurrency. You are expected to re-fetch this data at your own discretion as Discord does not recommend caching the data for extended periods as it can change as your client leaves and joins guilds and possibly cause rate limit errors.
+
+You should start your clusters 1 by 1 as rate limit info is only fetched on Client.connect or when you manually call Client.fetchConnectInfo when /gateway/bot is fetched
+
 ### Microservice Bots:
 I've written a general whitepaper on the idea of microservice bots, which you can find on gist: [Microservice Bot Whitepaper](https://gist.github.com/DasWolke/c9d7dfe6a78445011162a12abd32091d)
 
