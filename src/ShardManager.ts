@@ -1,7 +1,7 @@
 "use strict";
 
 import Shard from "./Shard";
-import RatelimitBucket from "./structures/RateLimitBucket";
+import RatelimitBucket from "./structures/RatelimitBucket";
 
 /**
  * Class used for managing shards for the user.
