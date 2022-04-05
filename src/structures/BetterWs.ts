@@ -200,7 +200,6 @@ class BetterWs extends EventEmitter {
 	}
 
 	private _onClose() {
-		console.log("socket closed");
 		const socket = this._socket;
 		const internal = this._internal;
 		if (!socket) return;
