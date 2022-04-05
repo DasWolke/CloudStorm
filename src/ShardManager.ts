@@ -70,7 +70,6 @@ class ShardManager {
 		shard.on("disconnect", (code, reason, gracefulClose) => {
 			this.client.emit("debug", `Websocket of shard ${shard.id} closed with code ${code} and reason: ${reason ? reason : "None"}`);
 			if (code === 1000 && gracefulClose) return this._checkDisconnect();
-			shard.connector.connect();
 		});
 	}
 

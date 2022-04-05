@@ -9,7 +9,6 @@ import { randomBytes, createHash } from "crypto";
 import { createInflate, inflateSync, constants } from "zlib";
 import { request } from "https";
 import util from "util";
-const Z_SYNC_FLUSH = constants.Z_SYNC_FLUSH;
 import { GATEWAY_OP_CODES } from "../Constants";
 
 import RatelimitBucket from "./RatelimitBucket";
@@ -79,7 +78,6 @@ class BetterWs extends EventEmitter {
 	public connect(): Promise<void> {
 		if (this._socket) return Promise.resolve(void 0);
 		const key = randomBytes(16).toString("base64");
-		this.emit("debug", "Creating connection");
 		const url = new URL(this.address);
 		const req = request({
 			hostname: url.hostname,
@@ -147,6 +145,7 @@ class BetterWs extends EventEmitter {
 		// @ts-ignore
 		promise.resolve = resolver;
 		internal.closePromise = promise;
+		return promise;
 	}
 
 	public sendMessage(data: import("../Types").IWSMessage): Promise<void> {
@@ -201,6 +200,7 @@ class BetterWs extends EventEmitter {
 	}
 
 	private _onClose() {
+		console.log("socket closed");
 		const socket = this._socket;
 		const internal = this._internal;
 		if (!socket) return;
@@ -215,10 +215,8 @@ class BetterWs extends EventEmitter {
 			internal.zlib.close();
 			internal.zlib = null;
 		}
-		if (internal.closePromise) {
-			// @ts-ignore
-			internal.closePromise.resolve(void 0);
-		}
+		// @ts-ignore
+		if (internal.closePromise) internal.closePromise.resolve(void 0);
 	}
 
 	private _onReadable() {
@@ -259,12 +257,12 @@ class BetterWs extends EventEmitter {
 				z.close = z._handle.close = z._v;
 				try {
 					// @ts-ignore
-					data = z._processChunk(message, Z_SYNC_FLUSH);
+					data = z._processChunk(message, constants.Z_SYNC_FLUSH);
 				} catch(e) {
 					error = e;
 				}
 				const l = message.length;
-				if (message[l - 4] !== 0 || message[l - 3] !== 0 || message[l - 2] !== 255 || message[l - 1] !== 255) this.emit("debug", "discord actually does send fragmented zlib messages. if you see this error let me know");
+				if (message[l - 4] !== 0 || message[l - 3] !== 0 || message[l - 2] !== 255 || message[l - 1] !== 255) this.emit("debug", "discord actually does send fragmented zlib messages. If you see this error let me know");
 				// @ts-ignore
 				z.close = z._c;
 				// @ts-ignore
@@ -281,7 +279,10 @@ class BetterWs extends EventEmitter {
 					this._write(Buffer.allocUnsafe(0), 8);
 					return;
 				}
-				if (!data) return; // This should never run, but TS is lame
+				if (!data) {
+					this.emit("debug", "Data from zlib processing was null. If you see this error let me know"); // This should never run, but TS is lame
+					return;
+				}
 				packet = this.encoding === "json" ? JSON.parse(String(data)) : readETF(data, 1);
 			} else if (this.encoding === "json") {
 				const data = inflateSync(message);

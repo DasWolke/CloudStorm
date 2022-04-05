@@ -86,6 +86,7 @@ class DiscordConnector extends EventEmitter {
 	 */
 	public connect(): Promise<void> {
 		this._closing = false;
+		this.client.emit("debug", `Shard ${this.id} connecting to gateway`);
 		return this.betterWs.connect();
 	}
 
@@ -223,7 +224,6 @@ class DiscordConnector extends EventEmitter {
 		};
 
 		if (this.options.initialPresence) Object.assign(data.d, { presence: this._checkPresenceData(this.options.initialPresence) });
-
 		return this.betterWs.sendMessage(data);
 	}
 
@@ -362,10 +362,7 @@ class DiscordConnector extends EventEmitter {
 		if (code === 1000 && this._closing) gracefulClose = true;
 		this._closing = false;
 
-		if (gracefulClose) {
-			this.clearHeartBeat();
-			this.betterWs.removeAllListeners();
-		}
+		if (gracefulClose) this.clearHeartBeat();
 		this.emit("disconnect", code, reason, gracefulClose);
 	}
 
