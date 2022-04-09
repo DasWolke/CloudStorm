@@ -14,6 +14,8 @@ export interface IntentFlags {
 	DIRECT_MESSAGES: number;
 	DIRECT_MESSAGE_REACTIONS: number
 	DIRECT_MESSAGE_TYPING: number;
+	MESSAGE_CONTENT: number;
+	GUILD_SCHEDULED_EVENTS: number;
 }
 
 export type IntentResolvable = number | Array<number> | keyof IntentFlags | Array<keyof IntentFlags>;
