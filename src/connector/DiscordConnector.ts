@@ -213,9 +213,9 @@ class DiscordConnector extends EventEmitter {
 			d: {
 				token: this.options.token,
 				properties: {
-					$os: process.platform,
-					$browser: "CloudStorm",
-					$device: "CloudStorm"
+					os: process.platform,
+					browser: "CloudStorm",
+					device: "CloudStorm"
 				},
 				large_threshold: this.options.largeGuildThreshold,
 				shard: [this.id, this.options.totalShards || 1],
