@@ -220,7 +220,7 @@ class BetterWs extends EventEmitter {
 
 	private _onReadable() {
 		const socket = this._socket;
-		while(socket!.readableLength > 1) {
+		while((socket?.readableLength || 0) > 1) {
 			let length = readRange(socket!, 1, 1) & 127;
 			let bytes = 0;
 			if (length > 125) {
@@ -233,7 +233,7 @@ class BetterWs extends EventEmitter {
 			const fin = frame[0] >> 7;
 			const opcode = frame[0] & 15;
 			if (fin !== 1 || opcode === 0) this.emit("debug", "discord actually does send messages with fin=0. if you see this error let me know");
-			const payload = frame.slice(2 + bytes);
+			const payload = frame.subarray(2 + bytes);
 			this._processFrame(opcode, payload);
 		}
 	}
@@ -292,7 +292,7 @@ class BetterWs extends EventEmitter {
 		}
 		case 8: {
 			const code = message.length > 1 ? (message[0] << 8) + message[1] : 0;
-			const reason = message.length > 2 ? message.slice(2).toString() : "";
+			const reason = message.length > 2 ? message.subarray(2).toString() : "";
 			this.emit("ws_close", code, reason);
 			this._write(Buffer.from([code >> 8, code & 255]), 8);
 			break;
@@ -316,10 +316,10 @@ function readRange(socket: import("net").Socket, index: number, bytes: number) {
 	let read = 0;
 	let num = 0;
 	do {
-		for (let i = 0; i < head.data.length; i++) {
+		for (const element of head.data) {
 			if (++cursor > index) {
 				num *= 256;
-				num += head.data[i];
+				num += element;
 				if (++read === bytes) return num;
 			}
 		}
@@ -542,7 +542,7 @@ function writeETF(data: any) {
 		}
 	};
 	loop(data);
-	return Buffer.from(b.slice(0, i));
+	return Buffer.from(b.subarray(0, i));
 }
 
 

@@ -52,6 +52,8 @@ class DiscordConnector extends EventEmitter {
 	public lastHeartbeatSend = 0;
 	public latency = 0;
 	private _closing = false;
+	public identifyAddress: string;
+	public resumeAddress: string | null = null;
 
 	public static readonly default = DiscordConnector;
 
@@ -67,8 +69,9 @@ class DiscordConnector extends EventEmitter {
 		this.client = client;
 		this.options = client.options;
 		this.reconnect = this.options.reconnect || true;
+		this.identifyAddress = this.options.endpoint!;
 
-		this.betterWs = new BetterWs(this.options.endpoint as string, this.options.ws!);
+		this.betterWs = new BetterWs(this.identifyAddress, this.options.ws!);
 
 		this.betterWs.on("ws_open", () => {
 			this.status = "connecting";
@@ -76,7 +79,7 @@ class DiscordConnector extends EventEmitter {
 			reconnecting = false;
 		});
 		this.betterWs.on("ws_message", msg => this.messageAction(msg));
-		this.betterWs.on("ws_close", (code, reason) => this.handleWsClose(code, reason));
+		this.betterWs.on<"ws_close">("ws_close", (code, reason) => this.handleWsClose(code, reason));
 		this.betterWs.on("debug", event => this.client.emit("debug", event));
 		this.betterWs.on("debug_send", data => this.client.emit("rawSend", data));
 	}
@@ -87,6 +90,7 @@ class DiscordConnector extends EventEmitter {
 	public connect(): Promise<void> {
 		this._closing = false;
 		this.client.emit("debug", `Shard ${this.id} connecting to gateway`);
+		// The address should already be updated if resuming/identifying
 		return this.betterWs.connect();
 	}
 
@@ -125,7 +129,7 @@ class DiscordConnector extends EventEmitter {
 
 		case OP.RECONNECT:
 			this.client.emit("debug", `Gateway asked shard ${this.id} to reconnect`);
-			if (this.options.reconnect) this._reconnect(true);
+			if (this.options.reconnect && this.betterWs.status !== 2) this._reconnect(true);
 			else this.disconnect();
 			break;
 
@@ -145,7 +149,7 @@ class DiscordConnector extends EventEmitter {
 			this.heartbeatTimeout = setInterval(() => {
 				if (this.lastACKAt <= Date.now() - (this.heartbeatInterval + 5000)) {
 					this.client.emit("debug", `Shard ${this.id} has not received a heartbeat ACK in ${this.heartbeatInterval + 5000}ms.`);
-					if (this.options.reconnect) this._reconnect(true);
+					if (this.options.reconnect && this.betterWs.status !== 2) this._reconnect(true);
 					else this.disconnect();
 				} else this.heartbeat();
 			}, this.heartbeatInterval);
@@ -171,8 +175,14 @@ class DiscordConnector extends EventEmitter {
 		if (resume) reconnecting = true;
 		if (this.betterWs.status === 2) void this.client.emit("error", `Client was attempting to ${resume ? "resume" : "reconnect"} while the WebSocket was still in the connecting state. This should never happen.`);
 		await this.betterWs.close(resume ? 4000 : 1012, "reconnecting");
-		if (resume) this.clearHeartBeat();
-		else this.reset();
+		if (resume) {
+			this.clearHeartBeat();
+			if (this.resumeAddress) this.betterWs.address = this.resumeAddress;
+			else this.betterWs.address = this.identifyAddress;
+		} else {
+			this.reset();
+			this.betterWs.address = this.identifyAddress;
+		}
 		this.connect();
 	}
 
@@ -213,9 +223,9 @@ class DiscordConnector extends EventEmitter {
 			d: {
 				token: this.options.token,
 				properties: {
-					$os: process.platform,
-					$browser: "CloudStorm",
-					$device: "CloudStorm"
+					os: process.platform,
+					browser: "CloudStorm",
+					device: "CloudStorm"
 				},
 				large_threshold: this.options.largeGuildThreshold,
 				shard: [this.id, this.options.totalShards || 1],
@@ -258,7 +268,10 @@ class DiscordConnector extends EventEmitter {
 		switch (message.t) {
 		case "READY":
 		case "RESUMED":
-			if (message.t === "READY") this.sessionId = message.d.session_id;
+			if (message.t === "READY") {
+				if (message.d.resume_gateway_url) this.resumeAddress = message.d.resume_gateway_url;
+				this.sessionId = message.d.session_id;
+			}
 			this.status = "ready";
 			this.emit("stateChange", "ready");
 			this._trace = message.d._trace;
@@ -281,25 +294,41 @@ class DiscordConnector extends EventEmitter {
 		this.emit("stateChange", "disconnected");
 
 		// Disallowed Intents.
-		if (code === 4014) this.client.emit("error", "Disallowed Intents, check your client options and application page.");
+		if (code === 4014) {
+			this.betterWs.address = this.identifyAddress;
+			this.client.emit("error", "Disallowed Intents, check your client options and application page.");
+		}
 
 		// Invalid Intents.
-		if (code === 4013) this.client.emit("error", "Invalid Intents data, check your client options.");
+		if (code === 4013) {
+			this.betterWs.address = this.identifyAddress;
+			this.client.emit("error", "Invalid Intents data, check your client options.");
+		}
 
 		// Invalid API version.
-		if (code === 4012) this.client.emit("error", "Invalid API version.");
+		if (code === 4012) {
+			this.betterWs.address = this.identifyAddress;
+			this.client.emit("error", "Invalid API version.");
+		}
 
 		// Sharding required.
-		if (code === 4011) this.client.emit("error", "Shard would be on over 2500 guilds. Add more shards.");
+		if (code === 4011) {
+			this.betterWs.address = this.identifyAddress;
+			this.client.emit("error", "Shard would be on over 2500 guilds. Add more shards.");
+		}
 
 		// Invalid shard.
-		if (code === 4010) this.client.emit("error", "Invalid sharding data, check your client options.");
+		if (code === 4010) {
+			this.betterWs.address = this.identifyAddress;
+			this.client.emit("error", "Invalid sharding data, check your client options.");
+		}
 
 		// Session timed out.
 		// force identify if the session is marked as invalid.
 		if (code === 4009) {
 			this.client.emit("error", "Session timed out.");
 			this.clearHeartBeat();
+			this.betterWs.address = this.identifyAddress;
 			this.connect();
 		}
 
@@ -307,6 +336,8 @@ class DiscordConnector extends EventEmitter {
 		if (code === 4008) {
 			this.client.emit("error", "You are being rate limited. Wait before sending more packets.");
 			this.clearHeartBeat();
+			if (this.resumeAddress) this.betterWs.address = this.resumeAddress;
+			else this.betterWs.address = this.identifyAddress;
 			this.connect();
 		}
 
@@ -314,6 +345,7 @@ class DiscordConnector extends EventEmitter {
 		if (code === 4007) {
 			this.client.emit("error", "Invalid sequence. Reconnecting and starting a new session.");
 			this.reset();
+			this.betterWs.address = this.identifyAddress;
 			this.connect();
 		}
 
@@ -321,16 +353,22 @@ class DiscordConnector extends EventEmitter {
 		if (code === 4005) {
 			this.client.emit("error", "You sent more than one OP 2 IDENTIFY payload while the websocket was open.");
 			this.clearHeartBeat();
+			if (this.resumeAddress) this.betterWs.address = this.resumeAddress;
 			this.connect();
 		}
 
 		// Authentication failed.
-		if (code === 4004) this.client.emit("error", "Tried to connect with an invalid token");
+		if (code === 4004) {
+			this.betterWs.address = this.identifyAddress;
+			this.client.emit("error", "Tried to connect with an invalid token");
+		}
 
 		// Not authenticated.
 		if (code === 4003) {
 			this.client.emit("error", "You tried to send a packet before sending an OP 2 IDENTIFY or OP 6 RESUME.");
 			this.clearHeartBeat();
+			if (this.resumeAddress) this.betterWs.address = this.resumeAddress;
+			else this.betterWs.address = this.identifyAddress;
 			this.connect();
 		}
 
@@ -338,6 +376,8 @@ class DiscordConnector extends EventEmitter {
 		if (code === 4002) {
 			this.client.emit("error", "You sent an invalid payload");
 			this.clearHeartBeat();
+			if (this.resumeAddress) this.betterWs.address = this.resumeAddress;
+			else this.betterWs.address = this.identifyAddress;
 			this.connect();
 		}
 
@@ -345,6 +385,8 @@ class DiscordConnector extends EventEmitter {
 		if (code === 4001) {
 			this.client.emit("error", "You sent an invalid opcode or invalid payload for an opcode");
 			this.clearHeartBeat();
+			if (this.resumeAddress) this.betterWs.address = this.resumeAddress;
+			else this.betterWs.address = this.identifyAddress;
 			this.connect();
 		}
 
@@ -354,6 +396,8 @@ class DiscordConnector extends EventEmitter {
 			else {
 				this.client.emit("error", "Error code 4000 received. Attempting to resume");
 				this.clearHeartBeat();
+				if (this.resumeAddress) this.betterWs.address = this.resumeAddress;
+				else this.betterWs.address = this.identifyAddress;
 				this.connect();
 			}
 		}

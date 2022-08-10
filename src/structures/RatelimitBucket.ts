@@ -47,7 +47,7 @@ class RatelimitBucket {
 						} catch (e) {
 							rej(e);
 						}
-					}, this.limitReset);
+					}, this.limitReset).unref();
 				}
 				if (this.remaining !== 0) this.checkQueue().catch(rej);
 
