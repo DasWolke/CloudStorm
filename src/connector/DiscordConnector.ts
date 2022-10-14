@@ -31,6 +31,8 @@ interface DiscordConnector {
 	removeListener<E extends keyof ConnectorEvents>(event: E, listener: (...args: ConnectorEvents[E]) => any): this;
 }
 
+const recoverableErrorsRegex = /EAI_AGAIN/;
+
 /**
  * Class used for acting based on received events.
  *
@@ -87,11 +89,15 @@ class DiscordConnector extends EventEmitter {
 	/**
 	 * Connect to Discord.
 	 */
-	public connect(): Promise<void> {
+	public async connect(): Promise<void> {
 		this._closing = false;
 		this.client.emit("debug", `Shard ${this.id} connecting to gateway`);
 		// The address should already be updated if resuming/identifying
-		return this.betterWs.connect();
+		return this.betterWs.connect()
+			.catch(error => {
+				const e = String(error);
+				if (recoverableErrorsRegex.test(e)) setTimeout(() => this.connect(), 5000);
+			});
 	}
 
 	/**

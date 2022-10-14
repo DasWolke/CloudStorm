@@ -110,13 +110,7 @@ class BetterWs extends EventEmitter {
 				if (this.compress) {
 					const z = createInflate();
 					// @ts-ignore
-					z._c = z.close;
-					// @ts-ignore
-					z._h = z._handle;
-					// @ts-ignore
-					z._hc = z._handle.close;
-					// @ts-ignore
-					z._v = () => void 0;
+					z._c = z.close; z._h = z._handle; z._hc = z._handle.close; z._v = () => void 0;
 					this._internal.zlib = z;
 				}
 				this.emit("ws_open");
