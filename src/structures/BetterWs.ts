@@ -7,7 +7,8 @@
 import { EventEmitter } from "events";
 import { randomBytes, createHash } from "crypto";
 import { createInflate, inflateSync, constants } from "zlib";
-import { request } from "https";
+import https from "https";
+import http from "http";
 import util from "util";
 import { GATEWAY_OP_CODES } from "../Constants";
 
@@ -79,9 +80,12 @@ class BetterWs extends EventEmitter {
 		if (this._socket) return Promise.resolve(void 0);
 		const key = randomBytes(16).toString("base64");
 		const url = new URL(this.address);
-		const req = request({
+		const useHTTPS = url.protocol === "https:" || url.port === "443";
+		const port = url.port || (useHTTPS ? "443" : "80");
+		const req = (useHTTPS ? https : http).request({
 			hostname: url.hostname,
 			path: `${url.pathname}${url.search}`,
+			port: port,
 			headers: {
 				"Connection": "Upgrade",
 				"Upgrade": "websocket",
