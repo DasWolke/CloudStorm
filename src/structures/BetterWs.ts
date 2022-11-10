@@ -80,7 +80,7 @@ class BetterWs extends EventEmitter {
 		if (this._socket) return Promise.resolve(void 0);
 		const key = randomBytes(16).toString("base64");
 		const url = new URL(this.address);
-		const useHTTPS = url.protocol === "https:" || url.port === "443";
+		const useHTTPS = (url.protocol === "https:" || url.protocol === "wss:") || url.port === "443";
 		const port = url.port || (useHTTPS ? "443" : "80");
 		const req = (useHTTPS ? https : http).request({
 			hostname: url.hostname,
