@@ -1,7 +1,7 @@
 "use strict";
 
 import { EventEmitter } from "events";
-import DiscordConnector from "./connector/DiscordConnector";
+import DiscordConnector = require("./connector/DiscordConnector");
 import { GATEWAY_OP_CODES as OP_CODES } from "./Constants";
 
 interface ShardEvents {
@@ -33,18 +33,16 @@ interface Shard {
  */
 class Shard extends EventEmitter {
 	public id: number;
-	public client: import("./Client");
+	public client: EventEmitter & { options: Omit<import("./Types").IClientOptions, "snowtransferInstance"> & { token: string; endpoint?: string; } };
 	public ready: boolean;
 	public connector: DiscordConnector;
-
-	public static readonly default = Shard;
 
 	/**
 	 * Create a new Shard.
 	 * @param id id of the shard.
 	 * @param client Main class used for forwarding events.
 	 */
-	public constructor(id: number, client: import("./Client")) {
+	public constructor(id: number, client: Shard["client"]) {
 		super();
 
 		this.id = id;

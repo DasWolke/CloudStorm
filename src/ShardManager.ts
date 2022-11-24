@@ -1,7 +1,7 @@
 "use strict";
 
-import Shard from "./Shard";
-import RatelimitBucket from "./structures/RatelimitBucket";
+import Shard = require("./Shard");
+import RatelimitBucket = require("./structures/RatelimitBucket");
 
 /**
  * Class used for managing shards for the user.
@@ -9,18 +9,16 @@ import RatelimitBucket from "./structures/RatelimitBucket";
  * This class is automatically instantiated by the library and is documented for reference.
  */
 class ShardManager {
-	public client: import("./Client");
-	public options: import("./Client")["options"];
+	public client: import("events").EventEmitter & { options: Omit<import("./Types").IClientOptions, "snowtransferInstance"> & { token: string; endpoint?: string; } };
+	public options: ShardManager["client"]["options"];
 	public shards: { [id: number]: Shard };
 	public identifyBucket: RatelimitBucket;
 	public concurrencyBucket: RatelimitBucket | null = null;
 
-	public static readonly default = ShardManager;
-
 	/**
 	 * Create a new ShardManager.
 	 */
-	public constructor(client: import("./Client")) {
+	public constructor(client: ShardManager["client"]) {
 		this.client = client;
 		this.options = client.options;
 		this.shards = {};

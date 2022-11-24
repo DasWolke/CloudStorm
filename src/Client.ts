@@ -2,10 +2,10 @@
 
 const version = require("../package.json").version as string;
 import { EventEmitter } from "events";
-import Constants from "./Constants";
+import Constants = require("./Constants");
 import { SnowTransfer } from "snowtransfer";
-import ShardManager from "./ShardManager";
-import RatelimitBucket from "./structures/RatelimitBucket";
+import ShardManager = require("./ShardManager");
+import RatelimitBucket = require("./structures/RatelimitBucket");
 
 interface ClientEvents {
 	debug: [string];
@@ -45,8 +45,6 @@ class Client extends EventEmitter {
 	public shardManager: ShardManager;
 	public version: string;
 	private _restClient: SnowTransfer;
-
-	public static readonly default = Client;
 
 	/**
 	 * Create a new Client to connect to the Discord gateway.

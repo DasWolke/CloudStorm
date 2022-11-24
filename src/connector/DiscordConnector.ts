@@ -1,9 +1,9 @@
 "use strict";
 
 import { EventEmitter } from "events";
-import BetterWs from "../structures/BetterWs";
+import BetterWs = require("../structures/BetterWs");
 import { GATEWAY_OP_CODES as OP } from "../Constants";
-import Intents from "../Intents";
+import Intents = require("../Intents");
 
 let reconnecting = false;
 
@@ -40,8 +40,8 @@ const recoverableErrorsRegex = /EAI_AGAIN/;
  */
 class DiscordConnector extends EventEmitter {
 	public id: number;
-	public client: import("../Client");
-	public options: import("../Client")["options"];
+	public client: EventEmitter;
+	public options: Omit<import("../Types").IClientOptions, "snowtransferInstance"> & { token: string; endpoint?: string; };
 	public reconnect: boolean;
 	public betterWs: BetterWs;
 	public heartbeatTimeout: NodeJS.Timeout | null = null;
@@ -64,7 +64,7 @@ class DiscordConnector extends EventEmitter {
 	 * @param id id of the shard that created this class.
 	 * @param client Main client instance.
 	 */
-	public constructor(id: number, client: import("../Client")) {
+	public constructor(id: number, client: EventEmitter & { options: Omit<import("../Types").IClientOptions, "snowtransferInstance"> & { token: string; endpoint?: string; } }) {
 		super();
 
 		this.id = id;

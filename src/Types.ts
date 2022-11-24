@@ -1,7 +1,3 @@
-export type IntentFlags = (typeof import("./Intents"))["flags"];
-
-export type IntentResolvable = number | Array<number> | keyof IntentFlags | Array<keyof IntentFlags>;
-
 export interface IWSMessage {
 	op: import("discord-typings").GatewayOpcode;
 	d?: any;
@@ -28,10 +24,11 @@ export interface IClientOptions {
 	totalShards?: number;
 	reconnect?: boolean;
 	initialPresence?: import("discord-typings").GatewayPresenceUpdate;
-	intents?: IntentResolvable;
+	intents?: import("./Intents").IntentResolvable;
 	snowtransferInstance?: import("snowtransfer").SnowTransfer;
 	ws?: IClientWSOptions;
 }
+
 export interface IClientWSOptions {
 	compress?: boolean;
 	encoding?: "etf" | "json";

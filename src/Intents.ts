@@ -1,5 +1,8 @@
 "use strict";
 
+export type IntentFlags = typeof flags;
+export type IntentResolvable = number | Array<number> | keyof IntentFlags | Array<keyof IntentFlags>;
+
 export const flags = {
 	GUILDS: 1 << 0,
 	GUILD_MEMBERS: 1 << 1,
@@ -26,11 +29,11 @@ export const all = Object.values(flags).reduce((acc, p) => acc | p, 0);
 
 export const non_privileged = all & ~privileged;
 
-export function resolve(bit: import("./Types").IntentResolvable = 0): number {
+export function resolve(bit: IntentResolvable = 0): number {
 	if (typeof bit === "number" && bit >= 0) return bit;
 	if (typeof bit === "string" && flags[bit]) return flags[bit] | 0;
-	if (Array.isArray(bit)) return bit.map((p: import("./Types").IntentResolvable) => resolve(p)).reduce((prev, p) => prev | p, 0);
+	if (Array.isArray(bit)) return bit.map((p: IntentResolvable) => resolve(p)).reduce((prev, p) => prev | p, 0);
 	throw new RangeError("BITFIELD_INVALID");
 }
 
-export default exports as typeof import("./Intents");
+export default { flags, privileged, all, non_privileged, resolve };

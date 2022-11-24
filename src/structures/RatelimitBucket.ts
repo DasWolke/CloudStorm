@@ -11,13 +11,10 @@ class RatelimitBucket {
 	public defaultReset: number | undefined;
 	public resetTimeout: NodeJS.Timeout | null;
 
-	public static readonly default = RatelimitBucket;
-
 	/**
 	 * Create a new Bucket.
 	 * @param limit Number of functions that may be executed during the timeframe set in limitReset.
 	 * @param limitReset Timeframe in milliseconds until the ratelimit resets.
-	 * @param defaultLimit If the bucket info does not provide default values, but provides remaining, this is the limit to use after the initial reset.
 	 * @param defaultReset If the bucket info does not provide default values, but provides remaining, this is the reset to use after the initial reset.
 	 */
 	public constructor(limit = 5, limitReset = 5000, defaultReset?: number) {

@@ -1,9 +1,9 @@
-import Client from "./Client";
-import Constants from "./Constants";
-import Intents from "./Intents";
+import Client = require("./Client");
+import Constants = require("./Constants");
+import Intents = require("./Intents");
 
+import Shard = require("./Shard");
+import ShardManager = require("./ShardManager");
+
+export { Client, Constants, Intents, Shard, ShardManager };
 export * from "./Types";
-
-export { Client, Constants, Intents };
-
-export default exports as typeof import("./index");

@@ -7,12 +7,12 @@
 import { EventEmitter } from "events";
 import { randomBytes, createHash } from "crypto";
 import { createInflate, inflateSync, constants } from "zlib";
-import https from "https";
-import http from "http";
-import util from "util";
+import https = require("https");
+import http = require("http");
+import util = require("util");
 import { GATEWAY_OP_CODES } from "../Constants";
 
-import RatelimitBucket from "./RatelimitBucket";
+import RatelimitBucket = require("./RatelimitBucket");
 
 interface BWSEvents {
 	ws_open: [];
