@@ -201,7 +201,6 @@ class BetterWs extends EventEmitter {
 		const socket = this._socket;
 		const internal = this._internal;
 		if (!socket) return;
-		this.emit("debug", "Connection closed");
 		socket.removeListener("data", this._onReadable);
 		socket.removeListener("error", this._onError);
 		socket.removeListener("close", this._onClose);

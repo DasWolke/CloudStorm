@@ -2,10 +2,8 @@
 
 import { EventEmitter } from "events";
 import BetterWs = require("../structures/BetterWs");
-import { GATEWAY_OP_CODES as OP } from "../Constants";
+import { GATEWAY_OP_CODES as OP, GATEWAY_VERSION } from "../Constants";
 import Intents = require("../Intents");
-
-let reconnecting = false;
 
 interface ConnectorEvents {
 	queueIdentify: [number];
@@ -56,6 +54,7 @@ class DiscordConnector extends EventEmitter {
 	private _closing = false;
 	public identifyAddress: string;
 	public resumeAddress: string | null = null;
+	public reconnecting = false;
 
 	public static readonly default = DiscordConnector;
 
@@ -78,7 +77,7 @@ class DiscordConnector extends EventEmitter {
 		this.betterWs.on("ws_open", () => {
 			this.status = "connecting";
 			this.emit("stateChange", "connecting");
-			reconnecting = false;
+			this.reconnecting = false;
 		});
 		this.betterWs.on("ws_message", msg => this.messageAction(msg));
 		this.betterWs.on<"ws_close">("ws_close", (code, reason) => this.handleWsClose(code, reason));
@@ -115,15 +114,6 @@ class DiscordConnector extends EventEmitter {
 	private async messageAction(message: import("../Types").IGatewayMessage): Promise<void> {
 		this.client.emit("rawReceive", message);
 
-		if (message.s) {
-			if (message.s > this.seq + 1) {
-				this.client.emit("debug", `Shard ${this.id}, invalid sequence: current: ${this.seq} message: ${message.s}`);
-				this.seq = message.s;
-				this.resume();
-			}
-			this.seq = message.s;
-		}
-
 		switch (message.op) {
 		case OP.DISPATCH:
 			this.handleDispatch(message);
@@ -140,6 +130,7 @@ class DiscordConnector extends EventEmitter {
 			break;
 
 		case OP.INVALID_SESSION:
+			this.client.emit("debug", `Shard ${this.id}'s session was invalidated`);
 			if (message.d && this.sessionId) this.resume();
 			else {
 				this.seq = 0;
@@ -178,8 +169,8 @@ class DiscordConnector extends EventEmitter {
 	 * @param resume Whether or not the client intends to send an OP 6 RESUME later.
 	 */
 	private async _reconnect(resume = false): Promise<void> {
-		if (resume) reconnecting = true;
-		if (this.betterWs.status === 2) void this.client.emit("error", `Client was attempting to ${resume ? "resume" : "reconnect"} while the WebSocket was still in the connecting state. This should never happen.`);
+		if (resume) this.reconnecting = true;
+		if (this.betterWs.status === 2) return void this.client.emit("error", `Client was attempting to ${resume ? "resume" : "reconnect"} while the WebSocket was still in the connecting state. This should never happen.`);
 		await this.betterWs.close(resume ? 4000 : 1012, "reconnecting");
 		if (resume) {
 			this.clearHeartBeat();
@@ -246,8 +237,8 @@ class DiscordConnector extends EventEmitter {
 	/**
 	 * Send an OP 6 RESUME to the gateway.
 	 */
-	private async resume(): Promise<void> {
-		if (this.betterWs.status !== 1) void this.client.emit("debug", "Client was attempting to resume when the ws was not open");
+	public async resume(): Promise<void> {
+		if (this.betterWs.status !== 1) return void this.client.emit("debug", "Client was attempting to resume when the ws was not open");
 		this.client.emit("debug", `Shard ${this.id} is resuming`);
 		this.status = "resuming";
 		this.emit("stateChange", "resuming");
@@ -261,7 +252,7 @@ class DiscordConnector extends EventEmitter {
 	 * Send an OP 1 HEARTBEAT to the gateway.
 	 */
 	private heartbeat(): void {
-		if (this.betterWs.status !== 1) void this.client.emit("debug", "Client was attempting to heartbeat when the ws was not open");
+		if (this.betterWs.status !== 1) return;
 		this.betterWs.sendMessage({ op: OP.HEARTBEAT, d: this.seq });
 		this.lastHeartbeatSend = Date.now();
 	}
@@ -271,11 +262,19 @@ class DiscordConnector extends EventEmitter {
 	 * @param message Message received from the websocket.
 	 */
 	private handleDispatch(message: import("../Types").IGatewayMessage): void {
+		if (message.s) { // sequence is from dispatch
+			if (message.s > this.seq + 1) {
+				this.client.emit("debug", `Shard ${this.id}, invalid sequence: current: ${this.seq} message: ${message.s}`);
+				this.seq = message.s;
+				this.resume();
+			}
+			this.seq = message.s;
+		}
 		switch (message.t) {
 		case "READY":
 		case "RESUMED":
 			if (message.t === "READY") {
-				if (message.d.resume_gateway_url) this.resumeAddress = message.d.resume_gateway_url;
+				if (message.d.resume_gateway_url) this.resumeAddress = `${message.d.resume_gateway_url}?v=${GATEWAY_VERSION}&encoding=${this.options.ws?.encoding === "etf" ? "etf" : "json"}${this.options.ws?.compress ? "&compress=zlib-stream" : ""}`;
 				this.sessionId = message.d.session_id;
 			}
 			this.status = "ready";
@@ -398,7 +397,7 @@ class DiscordConnector extends EventEmitter {
 
 		// Generic error / safe self closing code.
 		if (code === 4000) {
-			if (reconnecting) gracefulClose = true;
+			if (this.reconnecting) gracefulClose = true;
 			else {
 				this.client.emit("error", "Error code 4000 received. Attempting to resume");
 				this.clearHeartBeat();
