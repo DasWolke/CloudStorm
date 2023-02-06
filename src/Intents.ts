@@ -6,7 +6,7 @@ export type IntentResolvable = number | Array<number> | keyof IntentFlags | Arra
 export const flags = {
 	GUILDS: 1 << 0,
 	GUILD_MEMBERS: 1 << 1,
-	GUILD_BANS: 1 << 2,
+	GUILD_MODERATION: 1 << 2,
 	GUILD_EMOJIS_AND_STICKERS: 1 << 3,
 	GUILD_INTEGRATIONS: 1 << 4,
 	GUILD_WEBHOOKS: 1 << 5,
@@ -20,7 +20,9 @@ export const flags = {
 	DIRECT_MESSAGE_REACTIONS: 1 << 13,
 	DIRECT_MESSAGE_TYPING: 1 << 14,
 	MESSAGE_CONTENT: 1 << 15,
-	GUILD_SCHEDULED_EVENTS: 1 >> 16
+	GUILD_SCHEDULED_EVENTS: 1 << 16,
+	AUTO_MODERATION_CONFIGURATION: 1 << 20,
+	AUTO_MODERATION_EXECUTION: 1 << 21
 };
 
 export const privileged = flags.GUILD_MEMBERS | flags.GUILD_PRESENCES | flags.MESSAGE_CONTENT;

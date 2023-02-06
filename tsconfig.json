@@ -18,7 +18,8 @@
 		"strictBindCallApply": true,
 		"strictNullChecks": true,
 		"target": "ES2019",
-		"types": ["node"]
+		"types": ["node"],
+		"skipLibCheck": true
 	},
-	"include": ["./src"]
+	"include": ["./src"],
 }

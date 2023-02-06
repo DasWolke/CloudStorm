@@ -6,16 +6,17 @@ import Constants = require("./Constants");
 import { SnowTransfer } from "snowtransfer";
 import ShardManager = require("./ShardManager");
 import RatelimitBucket = require("./structures/RatelimitBucket");
+import type APITypes = require("discord-api-types/v10")
 
 interface ClientEvents {
 	debug: [string];
-	rawSend: [import("./Types").IWSMessage];
-	rawReceive: [import("./Types").IGatewayMessage];
+	rawSend: [APITypes.GatewaySendPayload];
+	rawReceive: [APITypes.GatewayReceivePayload];
+	error: [string]; // no processing messages
+
 	event: [import("./Types").IGatewayMessage];
-	dispatch: [import("./Types").IGatewayMessage];
-	voiceStateUpdate: [import("./Types").IGatewayMessage];
+	dispatch: [import("./Types").IGatewayDispatch];
 	shardReady: [{ id: number; ready: boolean; }];
-	error: [string];
 	ready: [];
 	disconnected: [];
 }
@@ -142,17 +143,17 @@ class Client extends EventEmitter {
 	 * @returns Promise that's resolved once all shards have sent the websocket payload.
 	 *
 	 * @example
-	 * // Connect to Discord and set status to do not disturb and game to "Memes are Dreams".
+	 * // Connect to Discord and set status to do not disturb and activity to "Memes are Dreams".
 	 * const CloudStorm = require("cloudstorm"); // CloudStorm also supports import statements.
 	 * const token = "token";
 	 * const client = new CloudStorm.Client(token);
 	 * client.connect();
 	 * client.once("ready", () => {
 	 * 	// Client is connected to Discord and is ready, so we can update the status.
-	 * 	client.presenceUpdate({ status: "dnd", game: { name: "Memes are Dreams" } });
+	 * 	client.presenceUpdate({ status: "dnd", activities: [{ name: "Memes are Dreams", type: 0 }] });
 	 * });
 	 */
-	public async presenceUpdate(data: import("discord-typings").GatewayPresenceUpdate): Promise<void> {
+	public async presenceUpdate(data: Parameters<Client["shardManager"]["presenceUpdate"]>["0"]): Promise<void> {
 		return this.shardManager.presenceUpdate(data);
 	}
 
@@ -163,17 +164,17 @@ class Client extends EventEmitter {
 	 * @returns Promise that's resolved once the shard has sent the websocket payload.
 	 *
 	 * @example
-	 * // Connect to Discord and set status to do not disturb and game to "Im shard 0".
+	 * // Connect to Discord and set status to do not disturb and activity to "Im shard 0".
 	 * const CloudStorm = require("cloudstorm"); // CloudStorm also supports import statements.
 	 * const token = "token";
 	 * const client = new CloudStorm.Client(token);
 	 * client.connect();
 	 * client.once("ready", () => {
 	 * 	// Client is connected to Discord and is ready, so we can update the status of shard 0.
-	 * 	client.shardPresenceUpdate(0, { status: "dnd", game: { name: "Im shard 0" } });
+	 * 	client.shardPresenceUpdate(0, { status: "dnd", activities: [{ name: "Im shard 0", type: 0 }] });
 	 * });
 	 */
-	public shardStatusUpdate(shardId: number, data: import("discord-typings").GatewayPresenceUpdate): Promise<void> {
+	public shardStatusUpdate(shardId: number, data: Parameters<Client["shardManager"]["shardPresenceUpdate"]>["1"]): Promise<void> {
 		return this.shardManager.shardPresenceUpdate(shardId, data);
 	}
 
@@ -196,7 +197,7 @@ class Client extends EventEmitter {
 	 * 	client.voiceStateUpdate(0, { guild_id: "id", channel_id: "id", self_mute: false, self_deaf: false });
 	 * });
 	 */
-	public voiceStateUpdate(shardId: number, data: import("discord-typings").VoiceStateUpdatePayload & { self_deaf?: boolean; self_mute?: boolean; }): Promise<void> {
+	public voiceStateUpdate(shardId: number, data: Parameters<Client["shardManager"]["voiceStateUpdate"]>["1"]): Promise<void> {
 		return this.shardManager.voiceStateUpdate(shardId, data);
 	}
 
@@ -218,7 +219,7 @@ class Client extends EventEmitter {
 	 * 	client.requestGuildMembers(0, { guild_id: "id" });
 	 * });
 	 */
-	public requestGuildMembers(shardId: number, data: import("discord-typings").GuildRequestMembersPayload & { limit?: number; }): Promise<void> {
+	public requestGuildMembers(shardId: number, data: Parameters<Client["shardManager"]["requestGuildMembers"]>["1"]): Promise<void> {
 		if (!data.guild_id) throw new Error("You need to pass a guild_id");
 		return this.shardManager.requestGuildMembers(shardId, data);
 	}

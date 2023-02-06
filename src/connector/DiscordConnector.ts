@@ -5,9 +5,10 @@ import BetterWs = require("../structures/BetterWs");
 import { GATEWAY_OP_CODES as OP, GATEWAY_VERSION } from "../Constants";
 import Intents = require("../Intents");
 
+import APITypes = require("discord-api-types/v10")
+
 interface ConnectorEvents {
 	queueIdentify: [number];
-	event: [import("../Types").IWSMessage];
 	ready: [boolean];
 	disconnect: [number, string, boolean];
 	stateChange: ["connecting" | "identifying" | "resuming" | "ready" | "disconnected"]
@@ -79,10 +80,10 @@ class DiscordConnector extends EventEmitter {
 			this.emit("stateChange", "connecting");
 			this.reconnecting = false;
 		});
-		this.betterWs.on("ws_message", msg => this.messageAction(msg));
+		this.betterWs.on("ws_receive", msg => this.messageAction(msg));
 		this.betterWs.on<"ws_close">("ws_close", (code, reason) => this.handleWsClose(code, reason));
-		this.betterWs.on("debug", event => this.client.emit("debug", event));
-		this.betterWs.on("debug_send", data => this.client.emit("rawSend", data));
+		this.betterWs.on("debug", event => this.client.emit("error", event));
+		this.betterWs.on("ws_send", data => this.client.emit("rawSend", data));
 	}
 
 	/**
@@ -111,12 +112,14 @@ class DiscordConnector extends EventEmitter {
 	 * Called with a parsed Websocket message to execute further actions.
 	 * @param message Message that was received.
 	 */
-	private async messageAction(message: import("../Types").IGatewayMessage): Promise<void> {
+	private async messageAction(message: APITypes.GatewayReceivePayload): Promise<void> {
 		this.client.emit("rawReceive", message);
+		const withShardID: import("../Types").IGatewayMessage = Object.assign(message, { shard_id: this.id });
+		this.client.emit("event", withShardID);
 
-		switch (message.op) {
+		switch (withShardID.op) {
 		case OP.DISPATCH:
-			this.handleDispatch(message);
+			this.handleDispatch(withShardID);
 			break;
 
 		case OP.HEARTBEAT:
@@ -131,7 +134,7 @@ class DiscordConnector extends EventEmitter {
 
 		case OP.INVALID_SESSION:
 			this.client.emit("debug", `Shard ${this.id}'s session was invalidated`);
-			if (message.d && this.sessionId) this.resume();
+			if (withShardID.d && this.sessionId) this.resume();
 			else {
 				this.seq = 0;
 				this.sessionId = "";
@@ -142,7 +145,7 @@ class DiscordConnector extends EventEmitter {
 		case OP.HELLO:
 			this.client.emit("debug", `Shard ${this.id} received HELLO`);
 			this.heartbeat();
-			this.heartbeatInterval = message.d.heartbeat_interval;
+			this.heartbeatInterval = withShardID.d.heartbeat_interval;
 			this.heartbeatTimeout = setInterval(() => {
 				if (this.lastACKAt <= Date.now() - (this.heartbeatInterval + 5000)) {
 					this.client.emit("debug", `Shard ${this.id} has not received a heartbeat ACK in ${this.heartbeatInterval + 5000}ms.`);
@@ -150,7 +153,7 @@ class DiscordConnector extends EventEmitter {
 					else this.disconnect();
 				} else this.heartbeat();
 			}, this.heartbeatInterval);
-			this._trace = message.d._trace;
+			this._trace = (withShardID.d as unknown as { _trace: string })._trace;
 			this.emit("queueIdentify", this.id);
 			break;
 
@@ -160,7 +163,7 @@ class DiscordConnector extends EventEmitter {
 			break;
 
 		default:
-			this.emit("event", message);
+			void 0;
 		}
 	}
 
@@ -208,7 +211,7 @@ class DiscordConnector extends EventEmitter {
 	 * @param force Whether CloudStorm should send an OP 2 IDENTIFY even if there's a session that could be resumed.
 	 */
 	public async identify(force?: boolean): Promise<void> {
-		if (this.betterWs.status !== 1) void this.client.emit("debug", "Client was attempting to identify when the ws was not open");
+		if (this.betterWs.status !== 1) void this.client.emit("error", "Client was attempting to identify when the ws was not open");
 		if (this.sessionId && !force) return this.resume();
 		this.client.emit("debug", `Shard ${this.id} is identifying`);
 
@@ -227,8 +230,8 @@ class DiscordConnector extends EventEmitter {
 				large_threshold: this.options.largeGuildThreshold,
 				shard: [this.id, this.options.totalShards || 1],
 				intents: this.options.intents ? Intents.resolve(this.options.intents) : 0
-			} as import("discord-typings").IdentifyPayload
-		};
+			}
+		} as APITypes.GatewayIdentify;
 
 		if (this.options.initialPresence) Object.assign(data.d, { presence: this._checkPresenceData(this.options.initialPresence) });
 		return this.betterWs.sendMessage(data);
@@ -238,13 +241,13 @@ class DiscordConnector extends EventEmitter {
 	 * Send an OP 6 RESUME to the gateway.
 	 */
 	public async resume(): Promise<void> {
-		if (this.betterWs.status !== 1) return void this.client.emit("debug", "Client was attempting to resume when the ws was not open");
+		if (this.betterWs.status !== 1) return void this.client.emit("error", "Client was attempting to resume when the ws was not open");
 		this.client.emit("debug", `Shard ${this.id} is resuming`);
 		this.status = "resuming";
 		this.emit("stateChange", "resuming");
 		return this.betterWs.sendMessage({
 			op: OP.RESUME,
-			d: { seq: this.seq, token: this.options.token, session_id: this.sessionId }
+			d: { seq: this.seq, token: this.options.token, session_id: this.sessionId! }
 		});
 	}
 
@@ -261,10 +264,12 @@ class DiscordConnector extends EventEmitter {
 	 * Handle dispatch events.
 	 * @param message Message received from the websocket.
 	 */
-	private handleDispatch(message: import("../Types").IGatewayMessage): void {
+	private handleDispatch(message: import("../Types").IGatewayDispatch): void {
+		this.client.emit("dispatch", message);
+
 		if (message.s) { // sequence is from dispatch
 			if (message.s > this.seq + 1) {
-				this.client.emit("debug", `Shard ${this.id}, invalid sequence: current: ${this.seq} message: ${message.s}`);
+				this.client.emit("debug", `Shard ${this.id} invalid sequence: { current: ${this.seq} message: ${message.s} }`);
 				this.seq = message.s;
 				this.resume();
 			}
@@ -279,12 +284,11 @@ class DiscordConnector extends EventEmitter {
 			}
 			this.status = "ready";
 			this.emit("stateChange", "ready");
-			this._trace = message.d._trace;
+			this._trace = (message.d as unknown as { _trace: string })._trace;
 			this.emit("ready", message.t === "RESUMED");
-			this.emit("event", message);
 			break;
 		default:
-			this.emit("event", message);
+			void 0;
 		}
 	}
 
@@ -419,7 +423,7 @@ class DiscordConnector extends EventEmitter {
 	 * Send an OP 3 PRESENCE_UPDATE to the gateway.
 	 * @param data Presence data to send.
 	 */
-	public async presenceUpdate(data: import("discord-typings").GatewayPresenceUpdate): Promise<void> {
+	public async presenceUpdate(data: Partial<APITypes.GatewayPresenceUpdateData>): Promise<void> {
 		return this.betterWs.sendMessage({ op: OP.PRESENCE_UPDATE, d: this._checkPresenceData(data) });
 	}
 
@@ -427,7 +431,7 @@ class DiscordConnector extends EventEmitter {
 	 * Send an OP 4 VOICE_STATE_UPDATE to the gateway.
 	 * @param data Voice state update data to send.
 	 */
-	public async voiceStateUpdate(data: import("discord-typings").VoiceStateUpdatePayload & { self_deaf?: boolean; self_mute?: boolean; }): Promise<void> {
+	public async voiceStateUpdate(data: APITypes.GatewayVoiceStateUpdateData & { self_deaf?: boolean; self_mute?: boolean; }): Promise<void> {
 		if (!data) return Promise.resolve();
 		return this.betterWs.sendMessage({ op: OP.VOICE_STATE_UPDATE, d: this._checkVoiceStateUpdateData(data) });
 	}
@@ -436,7 +440,7 @@ class DiscordConnector extends EventEmitter {
 	 * Send an OP 8 REQUEST_GUILD_MEMBERS to the gateway.
 	 * @param data Data to send.
 	 */
-	public async requestGuildMembers(data: import("discord-typings").GuildRequestMembersPayload & { limit?: number; }): Promise<void> {
+	public async requestGuildMembers(data: APITypes.GatewayRequestGuildMembersData & { limit?: number; }): Promise<void> {
 		return this.betterWs.sendMessage({ op: OP.REQUEST_GUILD_MEMBERS, d: this._checkRequestGuildMembersData(data) });
 	}
 
@@ -445,8 +449,8 @@ class DiscordConnector extends EventEmitter {
 	 * @param data Data to send.
 	 * @returns Data after it's fixed/checked.
 	 */
-	private _checkPresenceData(data: import("discord-typings").GatewayPresenceUpdate): import("discord-typings").GatewayPresenceUpdate {
-		data.status = data.status || "online";
+	private _checkPresenceData(data: Parameters<DiscordConnector["presenceUpdate"]>["0"]): APITypes.GatewayPresenceUpdateData {
+		data.status = data.status || APITypes.PresenceUpdateStatus.Online;
 		data.activities = data.activities && Array.isArray(data.activities) ? data.activities : [];
 
 		if (data.activities) {
@@ -459,7 +463,7 @@ class DiscordConnector extends EventEmitter {
 
 		data.afk = data.afk || false;
 		data.since = data.since || Date.now();
-		return data;
+		return data as APITypes.GatewayPresenceUpdateData;
 	}
 
 	/**
@@ -467,7 +471,7 @@ class DiscordConnector extends EventEmitter {
 	 * @param data Data to send.
 	 * @returns Data after it's fixed/checked.
 	 */
-	private _checkVoiceStateUpdateData(data: import("discord-typings").VoiceStateUpdatePayload & { self_deaf?: boolean; self_mute?: boolean; }): import("discord-typings").VoiceStateUpdatePayload {
+	private _checkVoiceStateUpdateData(data: Parameters<DiscordConnector["voiceStateUpdate"]>["0"]): APITypes.GatewayVoiceStateUpdateData {
 		data.channel_id = data.channel_id || null;
 		data.self_mute = data.self_mute || false;
 		data.self_deaf = data.self_deaf || false;
@@ -479,9 +483,12 @@ class DiscordConnector extends EventEmitter {
 	 * @param data Data to send.
 	 * @returns Data after it's fixed/checked.
 	 */
-	private _checkRequestGuildMembersData(data: import("discord-typings").GuildRequestMembersPayload & { limit?: number; }) {
-		data.query = data.query || "";
-		data.limit = data.limit || 0;
+	private _checkRequestGuildMembersData(data: Parameters<DiscordConnector["requestGuildMembers"]>["0"]): APITypes.GatewayRequestGuildMembersData {
+		const withQuery = data as APITypes.GatewayRequestGuildMembersDataWithQuery;
+		const withUserIDs = data as APITypes.GatewayRequestGuildMembersDataWithUserIds;
+		if (!withQuery.query && !withUserIDs.user_ids) withQuery.query = "";
+		if (withQuery.query && withUserIDs.user_ids) delete (data as { query?: string; }).query; // the intention may be to get users by ID
+		data.limit = data.limit || 10;
 		return data;
 	}
 }

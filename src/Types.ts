@@ -1,13 +1,8 @@
-export interface IWSMessage {
-	op: import("discord-typings").GatewayOpcode;
-	d?: any;
-	s?: number;
-	t?: import("discord-typings").GatewayEvent;
-}
+import type APITypes = require("discord-api-types/v10");
 
-export interface IGatewayMessage extends IWSMessage {
-	shard_id: number;
-}
+export type IGatewayMessage = APITypes.GatewayReceivePayload & { shard_id: number; };
+
+export type IGatewayDispatch = APITypes.GatewayDispatchPayload & { shard_id: number; };
 
 export interface IClientOptions {
 	largeGuildThreshold?: number;
@@ -23,7 +18,7 @@ export interface IClientOptions {
 	 */
 	totalShards?: number;
 	reconnect?: boolean;
-	initialPresence?: import("discord-typings").GatewayPresenceUpdate;
+	initialPresence?: APITypes.GatewayPresenceUpdateData;
 	intents?: import("./Intents").IntentResolvable;
 	snowtransferInstance?: import("snowtransfer").SnowTransfer;
 	ws?: IClientWSOptions;

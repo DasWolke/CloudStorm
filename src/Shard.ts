@@ -2,7 +2,6 @@
 
 import { EventEmitter } from "events";
 import DiscordConnector = require("./connector/DiscordConnector");
-import { GATEWAY_OP_CODES as OP_CODES } from "./Constants";
 
 interface ShardEvents {
 	disconnect: [number, string, boolean];
@@ -49,28 +48,11 @@ class Shard extends EventEmitter {
 		this.client = client;
 		this.ready = false;
 		this.connector = new DiscordConnector(id, client);
-		this.connector.on("event", (event) => {
-			const newEvent: import("./Types").IGatewayMessage = Object.assign(event, { shard_id: this.id });
-			this.client.emit("event", newEvent);
-
-			switch (event.op) {
-			case OP_CODES.DISPATCH:
-				this.client.emit("dispatch", newEvent);
-				break;
-
-			case OP_CODES.VOICE_STATE_UPDATE:
-				this.client.emit("voiceStateUpdate", newEvent);
-				break;
-
-			default:
-				break;
-			}
-		});
 		this.connector.on("disconnect", (...args) => {
 			this.ready = false;
 			this.emit("disconnect", ...args);
 		});
-		this.connector.on("ready", (resume) => this.emit("ready", resume));
+		this.connector.on("ready", resume => this.emit("ready", resume));
 		this.connector.on("queueIdentify", () => this.emit("queueIdentify", this.id));
 	}
 
@@ -99,7 +81,7 @@ class Shard extends EventEmitter {
 	 * Send an OP 3 PRESENCE_UPDATE to Discord.
 	 * @param data Data to send.
 	 */
-	public presenceUpdate(data: import("discord-typings").GatewayPresenceUpdate): Promise<void> {
+	public presenceUpdate(data: Parameters<Shard["connector"]["presenceUpdate"]>["0"]): Promise<void> {
 		return this.connector.presenceUpdate(data);
 	}
 
@@ -107,7 +89,7 @@ class Shard extends EventEmitter {
 	 * Send an OP 4 VOICE_STATE_UPDATE to Discord.
 	 * @param data Data to send
 	 */
-	public voiceStateUpdate(data: import("discord-typings").VoiceStateUpdatePayload & { self_deaf?: boolean; self_mute?: boolean; }): Promise<void> {
+	public voiceStateUpdate(data: Parameters<Shard["connector"]["voiceStateUpdate"]>["0"]): Promise<void> {
 		return this.connector.voiceStateUpdate(data);
 	}
 
@@ -115,7 +97,7 @@ class Shard extends EventEmitter {
 	 * Send an OP 8 REQUEST_GUILD_MEMBERS to Discord.
 	 * @param data Data to send.
 	 */
-	public requestGuildMembers(data: import("discord-typings").GuildRequestMembersPayload & { limit?: number; }): Promise<void> {
+	public requestGuildMembers(data: Parameters<Shard["connector"]["requestGuildMembers"]>["0"]): Promise<void> {
 		return this.connector.requestGuildMembers(data);
 	}
 }

@@ -14,11 +14,13 @@ import { GATEWAY_OP_CODES } from "../Constants";
 
 import RatelimitBucket = require("./RatelimitBucket");
 
+import type APITypes = require("discord-api-types/v10");
+
 interface BWSEvents {
 	ws_open: [];
 	ws_close: [number, string];
-	ws_message: [import("../Types").IGatewayMessage];
-	debug_send: [import("../Types").IWSMessage];
+	ws_receive: [APITypes.GatewayReceivePayload];
+	ws_send: [APITypes.GatewaySendPayload];
 	debug: [string];
 }
 
@@ -146,14 +148,14 @@ class BetterWs extends EventEmitter {
 		return promise;
 	}
 
-	public sendMessage(data: import("../Types").IWSMessage): Promise<void> {
+	public sendMessage(data: APITypes.GatewaySendPayload): Promise<void> {
 		if (!isValidRequest(data)) return Promise.reject(new Error("Invalid request"));
 
 		return new Promise(res => {
 			const presence = data.op === GATEWAY_OP_CODES.PRESENCE_UPDATE;
 			const sendMsg = () => {
 				this.wsBucket.queue(() => {
-					this.emit("debug_send", data);
+					this.emit("ws_send", data);
 					if (this.encoding === "json") this._write(Buffer.from(JSON.stringify(data)), 1);
 					else {
 						const etf = writeETF(data);
@@ -240,7 +242,7 @@ class BetterWs extends EventEmitter {
 		switch (opcode) {
 		case 1: {
 			const packet = JSON.parse(message.toString());
-			this.emit("ws_message", packet);
+			this.emit("ws_receive", packet);
 			break;
 		}
 		case 2: {
@@ -271,7 +273,7 @@ class BetterWs extends EventEmitter {
 				z._eventCount--;
 				z!.removeAllListeners("error");
 				if (error) {
-					this.emit("debug", "Zlib error");
+					this.emit("debug", "Zlib error processing chunk");
 					this._write(Buffer.allocUnsafe(0), 8);
 					return;
 				}
@@ -284,7 +286,7 @@ class BetterWs extends EventEmitter {
 				const data = inflateSync(message);
 				packet = JSON.parse(data.toString());
 			} else packet = readETF(message, 1);
-			this.emit("ws_message", packet);
+			this.emit("ws_receive", packet);
 			break;
 		}
 		case 8: {
@@ -302,7 +304,7 @@ class BetterWs extends EventEmitter {
 	}
 }
 
-function isValidRequest(value: import("../Types").IWSMessage) {
+function isValidRequest(value: APITypes.GatewaySendPayload) {
 	return value && typeof value === "object" && Number.isInteger(value.op) && typeof value.d !== "undefined";
 }
 
