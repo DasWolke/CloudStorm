@@ -30,7 +30,7 @@ interface DiscordConnector {
 	removeListener<E extends keyof ConnectorEvents>(event: E, listener: (...args: ConnectorEvents[E]) => any): this;
 }
 
-const recoverableErrorsRegex = /EAI_AGAIN/;
+const recoverableErrorsRegex = /(?:EAI_AGAIN)|(?:ECONNRESET)/;
 
 /**
  * Class used for acting based on received events.
@@ -96,7 +96,9 @@ class DiscordConnector extends EventEmitter {
 		return this.betterWs.connect()
 			.catch(error => {
 				const e = String(error);
-				if (recoverableErrorsRegex.test(e)) setTimeout(() => this.connect(), 5000);
+				if (recoverableErrorsRegex.test(e)) {
+					setTimeout(() => this.connect(), 5000);
+				}
 			});
 	}
 
@@ -128,7 +130,7 @@ class DiscordConnector extends EventEmitter {
 
 		case OP.RECONNECT:
 			this.client.emit("debug", `Gateway asked shard ${this.id} to reconnect`);
-			if (this.options.reconnect && this.betterWs.status !== 2) this._reconnect(true);
+			if (this.options.reconnect) this._reconnect(true);
 			else this.disconnect();
 			break;
 
@@ -149,7 +151,7 @@ class DiscordConnector extends EventEmitter {
 			this.heartbeatTimeout = setInterval(() => {
 				if (this.lastACKAt <= Date.now() - (this.heartbeatInterval + 5000)) {
 					this.client.emit("debug", `Shard ${this.id} has not received a heartbeat ACK in ${this.heartbeatInterval + 5000}ms.`);
-					if (this.options.reconnect && this.betterWs.status !== 2) this._reconnect(true);
+					if (this.options.reconnect) this._reconnect(true);
 					else this.disconnect();
 				} else this.heartbeat();
 			}, this.heartbeatInterval);
@@ -241,7 +243,7 @@ class DiscordConnector extends EventEmitter {
 	 * Send an OP 6 RESUME to the gateway.
 	 */
 	public async resume(): Promise<void> {
-		if (this.betterWs.status !== 1) return void this.client.emit("error", "Client was attempting to resume when the ws was not open");
+		if (this.betterWs.status !== 1) return void this.client.emit("error", `Shard ${this.id} was attempting to resume when the ws was not open`);
 		this.client.emit("debug", `Shard ${this.id} is resuming`);
 		this.status = "resuming";
 		this.emit("stateChange", "resuming");
@@ -255,7 +257,7 @@ class DiscordConnector extends EventEmitter {
 	 * Send an OP 1 HEARTBEAT to the gateway.
 	 */
 	private heartbeat(): void {
-		if (this.betterWs.status !== 1) return;
+		if (this.betterWs.status !== 1) return void this.client.emit("error", `Shard ${this.id} was attempting to heartbeat when the ws was not open`);
 		this.betterWs.sendMessage({ op: OP.HEARTBEAT, d: this.seq });
 		this.lastHeartbeatSend = Date.now();
 	}
