@@ -175,7 +175,7 @@ class DiscordConnector extends EventEmitter {
 	 */
 	private async _reconnect(resume = false): Promise<void> {
 		if (resume) this.reconnecting = true;
-		if (this.betterWs.status === 2) return void this.client.emit("error", `Client was attempting to ${resume ? "resume" : "reconnect"} while the WebSocket was still in the connecting state. This should never happen.`);
+		if (this.betterWs.status === 2) return void this.client.emit("error", `Shard ${this.id} was attempting to ${resume ? "resume" : "reconnect"} while the WebSocket was still in the connecting state. This should never happen.`);
 		await this.betterWs.close(resume ? 4000 : 1012, "reconnecting");
 		if (resume) {
 			this.clearHeartBeat();
@@ -213,7 +213,7 @@ class DiscordConnector extends EventEmitter {
 	 * @param force Whether CloudStorm should send an OP 2 IDENTIFY even if there's a session that could be resumed.
 	 */
 	public async identify(force?: boolean): Promise<void> {
-		if (this.betterWs.status !== 1) void this.client.emit("error", "Client was attempting to identify when the ws was not open");
+		if (this.betterWs.status !== 1) void this.client.emit("error", `Shard ${this.id} was attempting to identify when the ws was not open`);
 		if (this.sessionId && !force) return this.resume();
 		this.client.emit("debug", `Shard ${this.id} is identifying`);
 
