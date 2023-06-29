@@ -1,8 +1,12 @@
-import type APITypes = require("discord-api-types/v10");
+import type {
+	GatewayReceivePayload,
+	GatewayDispatchPayload,
+	GatewayPresenceUpdateData
+} from "discord-api-types/v10";
 
-export type IGatewayMessage = APITypes.GatewayReceivePayload & { shard_id: number; };
+export type IGatewayMessage = GatewayReceivePayload & { shard_id: number; };
 
-export type IGatewayDispatch = APITypes.GatewayDispatchPayload & { shard_id: number; };
+export type IGatewayDispatch = GatewayDispatchPayload & { shard_id: number; };
 
 export interface IClientOptions {
 	largeGuildThreshold?: number;
@@ -18,7 +22,7 @@ export interface IClientOptions {
 	 */
 	totalShards?: number;
 	reconnect?: boolean;
-	initialPresence?: APITypes.GatewayPresenceUpdateData;
+	initialPresence?: GatewayPresenceUpdateData;
 	intents?: import("./Intents").IntentResolvable;
 	snowtransferInstance?: import("snowtransfer").SnowTransfer;
 	ws?: IClientWSOptions;

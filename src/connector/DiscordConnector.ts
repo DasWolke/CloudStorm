@@ -5,7 +5,17 @@ import BetterWs = require("../structures/BetterWs");
 import { GATEWAY_OP_CODES as OP, GATEWAY_VERSION } from "../Constants";
 import Intents = require("../Intents");
 
-import APITypes = require("discord-api-types/v10")
+import type {
+	GatewayReceivePayload,
+	GatewayIdentify,
+	GatewayPresenceUpdateData,
+	GatewayVoiceStateUpdateData,
+	GatewayRequestGuildMembersData,
+	GatewayRequestGuildMembersDataWithQuery,
+	GatewayRequestGuildMembersDataWithUserIds
+} from "discord-api-types/v10";
+
+import { PresenceUpdateStatus } from "discord-api-types/v10";
 
 interface ConnectorEvents {
 	queueIdentify: [number];
@@ -70,7 +80,7 @@ class DiscordConnector extends EventEmitter {
 		this.id = id;
 		this.client = client;
 		this.options = client.options;
-		this.reconnect = this.options.reconnect || true;
+		this.reconnect = this.options.reconnect ?? true;
 		this.identifyAddress = this.options.endpoint!;
 
 		this.betterWs = new BetterWs(this.identifyAddress, this.options.ws!);
@@ -114,7 +124,7 @@ class DiscordConnector extends EventEmitter {
 	 * Called with a parsed Websocket message to execute further actions.
 	 * @param message Message that was received.
 	 */
-	private async messageAction(message: APITypes.GatewayReceivePayload): Promise<void> {
+	private async messageAction(message: GatewayReceivePayload): Promise<void> {
 		this.client.emit("rawReceive", message);
 		const withShardID: import("../Types").IGatewayMessage = Object.assign(message, { shard_id: this.id });
 		this.client.emit("event", withShardID);
@@ -230,10 +240,10 @@ class DiscordConnector extends EventEmitter {
 					device: "CloudStorm"
 				},
 				large_threshold: this.options.largeGuildThreshold,
-				shard: [this.id, this.options.totalShards || 1],
+				shard: [this.id, this.options.totalShards ?? 1],
 				intents: this.options.intents ? Intents.resolve(this.options.intents) : 0
 			}
-		} as APITypes.GatewayIdentify;
+		} as GatewayIdentify;
 
 		if (this.options.initialPresence) Object.assign(data.d, { presence: this._checkPresenceData(this.options.initialPresence) });
 		return this.betterWs.sendMessage(data);
@@ -425,7 +435,7 @@ class DiscordConnector extends EventEmitter {
 	 * Send an OP 3 PRESENCE_UPDATE to the gateway.
 	 * @param data Presence data to send.
 	 */
-	public async presenceUpdate(data: Partial<APITypes.GatewayPresenceUpdateData>): Promise<void> {
+	public async presenceUpdate(data: Partial<GatewayPresenceUpdateData>): Promise<void> {
 		return this.betterWs.sendMessage({ op: OP.PRESENCE_UPDATE, d: this._checkPresenceData(data) });
 	}
 
@@ -433,7 +443,7 @@ class DiscordConnector extends EventEmitter {
 	 * Send an OP 4 VOICE_STATE_UPDATE to the gateway.
 	 * @param data Voice state update data to send.
 	 */
-	public async voiceStateUpdate(data: APITypes.GatewayVoiceStateUpdateData & { self_deaf?: boolean; self_mute?: boolean; }): Promise<void> {
+	public async voiceStateUpdate(data: GatewayVoiceStateUpdateData & { self_deaf?: boolean; self_mute?: boolean; }): Promise<void> {
 		if (!data) return Promise.resolve();
 		return this.betterWs.sendMessage({ op: OP.VOICE_STATE_UPDATE, d: this._checkVoiceStateUpdateData(data) });
 	}
@@ -442,7 +452,7 @@ class DiscordConnector extends EventEmitter {
 	 * Send an OP 8 REQUEST_GUILD_MEMBERS to the gateway.
 	 * @param data Data to send.
 	 */
-	public async requestGuildMembers(data: APITypes.GatewayRequestGuildMembersData & { limit?: number; }): Promise<void> {
+	public async requestGuildMembers(data: GatewayRequestGuildMembersData & { limit?: number; }): Promise<void> {
 		return this.betterWs.sendMessage({ op: OP.REQUEST_GUILD_MEMBERS, d: this._checkRequestGuildMembersData(data) });
 	}
 
@@ -451,8 +461,8 @@ class DiscordConnector extends EventEmitter {
 	 * @param data Data to send.
 	 * @returns Data after it's fixed/checked.
 	 */
-	private _checkPresenceData(data: Parameters<DiscordConnector["presenceUpdate"]>["0"]): APITypes.GatewayPresenceUpdateData {
-		data.status = data.status || APITypes.PresenceUpdateStatus.Online;
+	private _checkPresenceData(data: Parameters<DiscordConnector["presenceUpdate"]>["0"]): GatewayPresenceUpdateData {
+		data.status = data.status ?? PresenceUpdateStatus.Online;
 		data.activities = data.activities && Array.isArray(data.activities) ? data.activities : [];
 
 		if (data.activities) {
@@ -463,9 +473,9 @@ class DiscordConnector extends EventEmitter {
 			}
 		}
 
-		data.afk = data.afk || false;
-		data.since = data.since || Date.now();
-		return data as APITypes.GatewayPresenceUpdateData;
+		data.afk = data.afk ?? false;
+		data.since = data.since ?? Date.now();
+		return data as GatewayPresenceUpdateData;
 	}
 
 	/**
@@ -473,10 +483,10 @@ class DiscordConnector extends EventEmitter {
 	 * @param data Data to send.
 	 * @returns Data after it's fixed/checked.
 	 */
-	private _checkVoiceStateUpdateData(data: Parameters<DiscordConnector["voiceStateUpdate"]>["0"]): APITypes.GatewayVoiceStateUpdateData {
-		data.channel_id = data.channel_id || null;
-		data.self_mute = data.self_mute || false;
-		data.self_deaf = data.self_deaf || false;
+	private _checkVoiceStateUpdateData(data: Parameters<DiscordConnector["voiceStateUpdate"]>["0"]): GatewayVoiceStateUpdateData {
+		data.channel_id = data.channel_id ?? null;
+		data.self_mute = data.self_mute ?? false;
+		data.self_deaf = data.self_deaf ?? false;
 		return data;
 	}
 
@@ -485,12 +495,12 @@ class DiscordConnector extends EventEmitter {
 	 * @param data Data to send.
 	 * @returns Data after it's fixed/checked.
 	 */
-	private _checkRequestGuildMembersData(data: Parameters<DiscordConnector["requestGuildMembers"]>["0"]): APITypes.GatewayRequestGuildMembersData {
-		const withQuery = data as APITypes.GatewayRequestGuildMembersDataWithQuery;
-		const withUserIDs = data as APITypes.GatewayRequestGuildMembersDataWithUserIds;
+	private _checkRequestGuildMembersData(data: Parameters<DiscordConnector["requestGuildMembers"]>["0"]): GatewayRequestGuildMembersData {
+		const withQuery = data as GatewayRequestGuildMembersDataWithQuery;
+		const withUserIDs = data as GatewayRequestGuildMembersDataWithUserIds;
 		if (!withQuery.query && !withUserIDs.user_ids) withQuery.query = "";
 		if (withQuery.query && withUserIDs.user_ids) delete (data as { query?: string; }).query; // the intention may be to get users by ID
-		data.limit = data.limit || 10;
+		data.limit = data.limit ?? 10;
 		return data;
 	}
 }

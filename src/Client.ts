@@ -6,12 +6,15 @@ import Constants = require("./Constants");
 import { SnowTransfer } from "snowtransfer";
 import ShardManager = require("./ShardManager");
 import RatelimitBucket = require("./structures/RatelimitBucket");
-import type APITypes = require("discord-api-types/v10")
+import type {
+	GatewaySendPayload,
+	GatewayReceivePayload
+} from "discord-api-types/v10";
 
 interface ClientEvents {
 	debug: [string];
-	rawSend: [APITypes.GatewaySendPayload];
-	rawReceive: [APITypes.GatewayReceivePayload];
+	rawSend: [GatewaySendPayload];
+	rawReceive: [GatewayReceivePayload];
 	error: [string]; // no processing messages
 
 	event: [import("./Types").IGatewayMessage];
@@ -95,7 +98,7 @@ class Client extends EventEmitter {
 		this._updateEndpoint(gateway.url);
 		const oldQueueConcurrency = [] as Array<[() => unknown, () => unknown]>;
 		const oldQueueIdentify = [] as Array<[() => unknown, () => unknown]>;
-		if (this.shardManager.concurrencyBucket && this.shardManager.concurrencyBucket.fnQueue.length) {
+		if (this.shardManager.concurrencyBucket?.fnQueue.length) {
 			oldQueueConcurrency.push(...this.shardManager.concurrencyBucket.fnQueue.map(i => [i.fn, i.callback] as [() => unknown, () => unknown]));
 			this.shardManager.concurrencyBucket.dropQueue();
 		}

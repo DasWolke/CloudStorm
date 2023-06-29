@@ -14,13 +14,16 @@ import { GATEWAY_OP_CODES } from "../Constants";
 
 import RatelimitBucket = require("./RatelimitBucket");
 
-import type APITypes = require("discord-api-types/v10");
+import type {
+	GatewayReceivePayload,
+	GatewaySendPayload
+} from "discord-api-types/v10";
 
 interface BWSEvents {
 	ws_open: [];
 	ws_close: [number, string];
-	ws_receive: [APITypes.GatewayReceivePayload];
-	ws_send: [APITypes.GatewaySendPayload];
+	ws_receive: [GatewayReceivePayload];
+	ws_send: [GatewaySendPayload];
 	debug: [string];
 }
 
@@ -59,7 +62,7 @@ class BetterWs extends EventEmitter {
 		super();
 
 		this.encoding = options.encoding === "etf" ? "etf" : "json";
-		this.compress = options.compress || false;
+		this.compress = options.compress ?? false;
 		this.address = address;
 		this.options = options;
 
@@ -148,7 +151,7 @@ class BetterWs extends EventEmitter {
 		return promise;
 	}
 
-	public sendMessage(data: APITypes.GatewaySendPayload): Promise<void> {
+	public sendMessage(data: GatewaySendPayload): Promise<void> {
 		if (!isValidRequest(data)) return Promise.reject(new Error("Invalid request"));
 
 		return new Promise(res => {
@@ -171,7 +174,7 @@ class BetterWs extends EventEmitter {
 
 	private _write(packet: Buffer, opcode: number) {
 		const socket = this._socket;
-		if (!socket || !socket.writable) return;
+		if (!socket?.writable) return;
 		const length = packet.length;
 		let frame: Buffer | undefined;
 		if (length < 126) {
@@ -304,7 +307,7 @@ class BetterWs extends EventEmitter {
 	}
 }
 
-function isValidRequest(value: APITypes.GatewaySendPayload) {
+function isValidRequest(value: GatewaySendPayload) {
 	return value && typeof value === "object" && Number.isInteger(value.op) && typeof value.d !== "undefined";
 }
 
