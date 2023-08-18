@@ -158,13 +158,7 @@ class DiscordConnector extends EventEmitter {
 			this.client.emit("debug", `Shard ${this.id} received HELLO`);
 			this.heartbeat();
 			this.heartbeatInterval = withShardID.d.heartbeat_interval;
-			this.heartbeatTimeout = setInterval(() => {
-				if (this.lastACKAt <= Date.now() - (this.heartbeatInterval + 5000)) {
-					this.client.emit("debug", `Shard ${this.id} has not received a heartbeat ACK in ${this.heartbeatInterval + 5000}ms.`);
-					if (this.options.reconnect) this._reconnect(true);
-					else this.disconnect();
-				} else this.heartbeat();
-			}, this.heartbeatInterval);
+			this.setHeartBeat();
 			this._trace = (withShardID.d as unknown as { _trace: string })._trace;
 			this.emit("queueIdentify", this.id);
 			break;
@@ -207,6 +201,16 @@ class DiscordConnector extends EventEmitter {
 		this.lastACKAt = 0;
 		this._trace = null;
 		this.clearHeartBeat();
+	}
+
+	private setHeartBeat(): void {
+		this.heartbeatTimeout = setInterval(() => {
+			if (this.lastACKAt <= Date.now() - (this.heartbeatInterval + 5000)) {
+				this.client.emit("debug", `Shard ${this.id} has not received a heartbeat ACK in ${this.heartbeatInterval + 5000}ms.`);
+				if (this.options.reconnect) this._reconnect(true);
+				else this.disconnect();
+			} else this.heartbeat();
+		}, this.heartbeatInterval);
 	}
 
 	/**
@@ -313,6 +317,7 @@ class DiscordConnector extends EventEmitter {
 		let gracefulClose = false;
 		this.status = "disconnected";
 		this.emit("stateChange", "disconnected");
+		this.clearHeartBeat();
 
 		// Disallowed Intents.
 		if (code === 4014) {
@@ -348,7 +353,6 @@ class DiscordConnector extends EventEmitter {
 		// force identify if the session is marked as invalid.
 		if (code === 4009) {
 			this.client.emit("error", "Session timed out.");
-			this.clearHeartBeat();
 			this.betterWs.address = this.identifyAddress;
 			this.connect();
 		}
@@ -356,7 +360,6 @@ class DiscordConnector extends EventEmitter {
 		// Rate limited.
 		if (code === 4008) {
 			this.client.emit("error", "You are being rate limited. Wait before sending more packets.");
-			this.clearHeartBeat();
 			if (this.resumeAddress) this.betterWs.address = this.resumeAddress;
 			else this.betterWs.address = this.identifyAddress;
 			this.connect();
@@ -373,7 +376,6 @@ class DiscordConnector extends EventEmitter {
 		// Already authenticated.
 		if (code === 4005) {
 			this.client.emit("error", "You sent more than one OP 2 IDENTIFY payload while the websocket was open.");
-			this.clearHeartBeat();
 			if (this.resumeAddress) this.betterWs.address = this.resumeAddress;
 			this.connect();
 		}
@@ -387,7 +389,6 @@ class DiscordConnector extends EventEmitter {
 		// Not authenticated.
 		if (code === 4003) {
 			this.client.emit("error", "You tried to send a packet before sending an OP 2 IDENTIFY or OP 6 RESUME.");
-			this.clearHeartBeat();
 			if (this.resumeAddress) this.betterWs.address = this.resumeAddress;
 			else this.betterWs.address = this.identifyAddress;
 			this.connect();
@@ -396,7 +397,6 @@ class DiscordConnector extends EventEmitter {
 		// Decode error.
 		if (code === 4002) {
 			this.client.emit("error", "You sent an invalid payload");
-			this.clearHeartBeat();
 			if (this.resumeAddress) this.betterWs.address = this.resumeAddress;
 			else this.betterWs.address = this.identifyAddress;
 			this.connect();
@@ -405,7 +405,6 @@ class DiscordConnector extends EventEmitter {
 		// Invalid opcode.
 		if (code === 4001) {
 			this.client.emit("error", "You sent an invalid opcode or invalid payload for an opcode");
-			this.clearHeartBeat();
 			if (this.resumeAddress) this.betterWs.address = this.resumeAddress;
 			else this.betterWs.address = this.identifyAddress;
 			this.connect();
@@ -416,7 +415,6 @@ class DiscordConnector extends EventEmitter {
 			if (this.reconnecting) gracefulClose = true;
 			else {
 				this.client.emit("error", "Error code 4000 received. Attempting to resume");
-				this.clearHeartBeat();
 				if (this.resumeAddress) this.betterWs.address = this.resumeAddress;
 				else this.betterWs.address = this.identifyAddress;
 				this.connect();
@@ -427,7 +425,6 @@ class DiscordConnector extends EventEmitter {
 		if (code === 1000 && this._closing) gracefulClose = true;
 		this._closing = false;
 
-		if (gracefulClose) this.clearHeartBeat();
 		this.emit("disconnect", code, reason, gracefulClose);
 	}
 
