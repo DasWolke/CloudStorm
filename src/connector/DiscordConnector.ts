@@ -48,9 +48,7 @@ const recoverableErrorsRegex = /(?:EAI_AGAIN)|(?:ECONNRESET)/;
  * This class is automatically instantiated by the library and is documented for reference.
  */
 class DiscordConnector extends EventEmitter {
-	public id: number;
-	public client: EventEmitter;
-	public options: Omit<import("../Types").IClientOptions, "snowtransferInstance"> & { token: string; endpoint?: string; };
+	public options: DiscordConnector["client"]["options"];
 	public reconnect: boolean;
 	public betterWs: BetterWs;
 	public heartbeatTimeout: NodeJS.Timeout | null = null;
@@ -74,11 +72,9 @@ class DiscordConnector extends EventEmitter {
 	 * @param id id of the shard that created this class.
 	 * @param client Main client instance.
 	 */
-	public constructor(id: number, client: EventEmitter & { options: Omit<import("../Types").IClientOptions, "snowtransferInstance"> & { token: string; endpoint?: string; } }) {
+	public constructor(public id: number, public client: EventEmitter & { options: Omit<import("../Types").IClientOptions, "snowtransferInstance"> & { token: string; endpoint?: string; } }) {
 		super();
 
-		this.id = id;
-		this.client = client;
 		this.options = client.options;
 		this.reconnect = this.options.reconnect ?? true;
 		this.identifyAddress = this.options.endpoint!;
@@ -466,7 +462,10 @@ class DiscordConnector extends EventEmitter {
 			for (const activity of data.activities) {
 				const index = data.activities.indexOf(activity);
 				if (activity.type === undefined) activity.type = activity.url ? 1 : 0;
-				if (!activity.name) data.activities.splice(index, 1);
+				if (!activity.name) {
+					if (activity.state && activity.type === 4) activity.name = "Custom Status"; // Discord requires name to not be empty even on custom status
+					else data.activities.splice(index, 1);
+				}
 			}
 		}
 

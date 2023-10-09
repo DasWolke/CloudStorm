@@ -49,8 +49,6 @@ interface BetterWs {
 class BetterWs extends EventEmitter {
 	public encoding: "etf" | "json";
 	public compress: boolean;
-	public address: string;
-	public options: import("../Types").IClientWSOptions;
 	public wsBucket = new RatelimitBucket(120, 60000);
 	public presenceBucket = new RatelimitBucket(5, 60000);
 
@@ -58,13 +56,11 @@ class BetterWs extends EventEmitter {
 	private _internal: { closePromise: Promise<void> | null; zlib: import("zlib").Inflate | null; };
 	private _connecting = false;
 
-	public constructor(address: string, options: import("../Types").IClientWSOptions) {
+	public constructor(public address: string, public options: import("../Types").IClientWSOptions) {
 		super();
 
 		this.encoding = options.encoding === "etf" ? "etf" : "json";
 		this.compress = options.compress ?? false;
-		this.address = address;
-		this.options = options;
 
 		this._socket = null;
 		this._internal = {

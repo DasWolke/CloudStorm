@@ -9,7 +9,6 @@ import RatelimitBucket = require("./structures/RatelimitBucket");
  * This class is automatically instantiated by the library and is documented for reference.
  */
 class ShardManager {
-	public client: import("events").EventEmitter & { options: Omit<import("./Types").IClientOptions, "snowtransferInstance"> & { token: string; endpoint?: string; } };
 	public options: ShardManager["client"]["options"];
 	public shards: { [id: number]: Shard };
 	public identifyBucket: RatelimitBucket;
@@ -18,7 +17,7 @@ class ShardManager {
 	/**
 	 * Create a new ShardManager.
 	 */
-	public constructor(client: ShardManager["client"]) {
+	public constructor(public client: import("events").EventEmitter & { options: Omit<import("./Types").IClientOptions, "snowtransferInstance"> & { token: string; endpoint?: string; } }) {
 		this.client = client;
 		this.options = client.options;
 		this.shards = {};

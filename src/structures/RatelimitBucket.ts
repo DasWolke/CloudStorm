@@ -5,10 +5,7 @@
  */
 class RatelimitBucket {
 	public fnQueue: Array<{ fn: () => unknown, callback: () => unknown; error: Error }>;
-	public limit: number;
 	public remaining: number;
-	public limitReset: number;
-	public defaultReset: number | undefined;
 	public resetTimeout: NodeJS.Timeout | null;
 
 	/**
@@ -17,13 +14,10 @@ class RatelimitBucket {
 	 * @param limitReset Timeframe in milliseconds until the ratelimit resets.
 	 * @param defaultReset If the bucket info does not provide default values, but provides remaining, this is the reset to use after the initial reset.
 	 */
-	public constructor(limit = 5, limitReset = 5000, defaultReset?: number) {
+	public constructor(public limit = 5, public limitReset = 5000, public defaultReset?: number) {
 		this.fnQueue = [];
-		this.limit = limit;
 		this.remaining = limit;
-		this.limitReset = limitReset;
 		this.resetTimeout = null;
-		this.defaultReset = defaultReset;
 	}
 
 	/**

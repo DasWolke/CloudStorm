@@ -31,9 +31,7 @@ interface Shard {
  * This class is automatically instantiated by the library and is documented for reference.
  */
 class Shard extends EventEmitter {
-	public id: number;
-	public client: EventEmitter & { options: Omit<import("./Types").IClientOptions, "snowtransferInstance"> & { token: string; endpoint?: string; } };
-	public ready: boolean;
+	public ready = false;
 	public connector: DiscordConnector;
 
 	/**
@@ -41,12 +39,9 @@ class Shard extends EventEmitter {
 	 * @param id id of the shard.
 	 * @param client Main class used for forwarding events.
 	 */
-	public constructor(id: number, client: Shard["client"]) {
+	public constructor(public id: number, public client: EventEmitter & { options: Omit<import("./Types").IClientOptions, "snowtransferInstance"> & { token: string; endpoint?: string; } }) {
 		super();
 
-		this.id = id;
-		this.client = client;
-		this.ready = false;
 		this.connector = new DiscordConnector(id, client);
 		this.connector.on("disconnect", (...args) => {
 			this.ready = false;
