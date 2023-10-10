@@ -50,7 +50,7 @@ class ShardManager {
 	 * Add event listeners to a shard to that the manager can act on received events.
 	 * @param shard Shard to add the event listeners to.
 	 */
-	private _addListener(shard: Shard) {
+	private _addListener(shard: Shard): void {
 		shard.on("ready", (resume) => {
 			shard.ready = true;
 			this.client.emit("debug", `Shard ${shard.id} ${resume ? "has resumed" : "is ready"}`);
@@ -66,7 +66,7 @@ class ShardManager {
 			});
 		});
 		shard.on("disconnect", (code, reason, gracefulClose) => {
-			this.client.emit("debug", `Websocket of shard ${shard.id} closed with code ${code} and reason: ${reason ? reason : "None"}`);
+			this.client.emit("debug", `Websocket of shard ${shard.id} closed with code ${code} and reason: ${reason ?? "None"}`);
 			if (code === 1000 && gracefulClose) return this._checkDisconnect();
 		});
 	}
@@ -74,7 +74,7 @@ class ShardManager {
 	/**
 	 * Checks if all shards spawned by this manager are ready.
 	 */
-	private _checkReady() {
+	private _checkReady(): void {
 		for (const shardId in this.shards) {
 			if (this.shards[shardId]) {
 				if (!this.shards[shardId].ready) return;
@@ -86,7 +86,7 @@ class ShardManager {
 	/**
 	 * Checks if all shards spawned by this manager are disconnected.
 	 */
-	private _checkDisconnect() {
+	private _checkDisconnect(): void {
 		for (const shardId in this.shards) {
 			if (this.shards[shardId]) {
 				if (this.shards[shardId].connector.status !== "disconnected") return;
@@ -99,7 +99,7 @@ class ShardManager {
 	 * Update the status of all currently connected shards which have been spawned by this manager.
 	 * @param data Data to send.
 	 */
-	public async presenceUpdate(data: Parameters<Shard["presenceUpdate"]>["0"]) {
+	public async presenceUpdate(data: Parameters<Shard["presenceUpdate"]>["0"]): Promise<void> {
 		for (const shardKey in this.shards) {
 			if (this.shards[shardKey]) {
 				const shard = this.shards[shardKey];
@@ -117,7 +117,7 @@ class ShardManager {
 		return new Promise((res, rej) => {
 			const shard = this.shards[shardId];
 			if (!shard) rej(new Error(`Shard ${shardId} does not exist`));
-			if (!shard.ready) shard.once("ready", () => shard.presenceUpdate(data).then(result => res(result)).catch(e => rej(e)));
+			if (!shard.ready) return;
 			shard.presenceUpdate(data).then(result => res(result)).catch(e => rej(e));
 		});
 	}
@@ -131,7 +131,7 @@ class ShardManager {
 		return new Promise((res, rej) => {
 			const shard = this.shards[shardId];
 			if (!shard) rej(new Error(`Shard ${shardId} does not exist`));
-			if (!shard.ready) shard.once("ready", () => shard.voiceStateUpdate(data).then(result => res(result)).catch(e => rej(e)));
+			if (!shard.ready) return;
 			shard.voiceStateUpdate(data).then(result => res(result)).catch(e => rej(e));
 		});
 	}
@@ -145,7 +145,7 @@ class ShardManager {
 		return new Promise((res, rej) => {
 			const shard = this.shards[shardId];
 			if (!shard) rej(new Error(`Shard ${shardId} does not exist`));
-			if (!shard.ready) shard.once("ready", () => shard.requestGuildMembers(data).then(result => res(result)).catch(e => rej(e)));
+			if (!shard.ready) return;
 			shard.requestGuildMembers(data).then(result => res(result)).catch(e => rej(e));
 		});
 	}
