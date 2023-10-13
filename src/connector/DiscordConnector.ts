@@ -411,7 +411,7 @@ class DiscordConnector extends EventEmitter {
 			if (this.reconnecting) gracefulClose = true;
 			else {
 				this.client.emit("error", `Error code ${code} received. Attempting to resume`);
-				if (this.resumeAddress) this.betterWs.address = this.resumeAddress;
+				if (this.resumeAddress && code !== 1001) this.betterWs.address = this.resumeAddress; // 1001 server going away. Reidentify
 				else this.betterWs.address = this.identifyAddress;
 				this.connect();
 			}
