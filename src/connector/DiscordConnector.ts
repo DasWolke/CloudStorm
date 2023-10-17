@@ -41,6 +41,23 @@ interface DiscordConnector {
 }
 
 const recoverableErrorsRegex = /(?:EAI_AGAIN)|(?:ECONNRESET)/;
+const resumableCodes = [4008, 4005, 4003, 4002, 4001, 4000];
+const shouldntAttemptReconnectCodes = [4014, 4013, 4012, 4011, 4010, 4004, 1000];
+const disconnectMessages = {
+	4014: "Disallowed Intents, check your client options and application page.",
+	4013: "Invalid Intents data, check your client options.",
+	4012: "Invalid API version.",
+	4011: "Shard would be on over 2500 guilds. Add more shards.",
+	4010: "Invalid sharding data, check your client options.",
+	4009: "Session timed out.",
+	4008: "You are being rate limited. Wait before sending more packets.",
+	4007: "Invalid sequence. Reconnecting and starting a new session.",
+	4005: "You sent more than one OP 2 IDENTIFY payload while the websocket was open.",
+	4004: "Tried to connect with an invalid token.",
+	4003: "You tried to send a packet before sending an OP 2 IDENTIFY or OP 6 RESUME.",
+	4002: "You sent an invalid payload.",
+	4001: "You sent an invalid opcode or invalid payload for an opcode."
+};
 
 /**
  * Class used for acting based on received events.
@@ -315,110 +332,19 @@ class DiscordConnector extends EventEmitter {
 		this.emit("stateChange", "disconnected");
 		this.clearHeartBeat();
 
-		// Disallowed Intents.
-		if (code === 4014) {
-			this.betterWs.address = this.identifyAddress;
-			this.client.emit("error", "Disallowed Intents, check your client options and application page.");
-		}
+		const message = disconnectMessages[code as keyof typeof disconnectMessages];
+		const isRecoverable = resumableCodes.includes(code);
+		const shouldntReconnect = shouldntAttemptReconnectCodes.includes(code);
 
-		// Invalid Intents.
-		if (code === 4013) {
-			this.betterWs.address = this.identifyAddress;
-			this.client.emit("error", "Invalid Intents data, check your client options.");
-		}
+		if (isRecoverable && this.resumeAddress) this.betterWs.address = this.resumeAddress;
+		else this.betterWs.address = this.identifyAddress;
 
-		// Invalid API version.
-		if (code === 4012) {
-			this.betterWs.address = this.identifyAddress;
-			this.client.emit("error", "Invalid API version.");
-		}
+		if (message) this.client.emit("error", message);
 
-		// Sharding required.
-		if (code === 4011) {
-			this.betterWs.address = this.identifyAddress;
-			this.client.emit("error", "Shard would be on over 2500 guilds. Add more shards.");
-		}
+		if ((code === 1000 && this._closing) || this.reconnecting) gracefulClose = true;
 
-		// Invalid shard.
-		if (code === 4010) {
-			this.betterWs.address = this.identifyAddress;
-			this.client.emit("error", "Invalid sharding data, check your client options.");
-		}
+		if (!shouldntReconnect && this.reconnect) this.connect();
 
-		// Session timed out.
-		// force identify if the session is marked as invalid.
-		if (code === 4009) {
-			this.client.emit("error", "Session timed out.");
-			this.betterWs.address = this.identifyAddress;
-			this.connect();
-		}
-
-		// Rate limited.
-		if (code === 4008) {
-			this.client.emit("error", "You are being rate limited. Wait before sending more packets.");
-			if (this.resumeAddress) this.betterWs.address = this.resumeAddress;
-			else this.betterWs.address = this.identifyAddress;
-			this.connect();
-		}
-
-		// Invalid sequence.
-		if (code === 4007) {
-			this.client.emit("error", "Invalid sequence. Reconnecting and starting a new session.");
-			this.reset();
-			this.betterWs.address = this.identifyAddress;
-			this.connect();
-		}
-
-		// Already authenticated.
-		if (code === 4005) {
-			this.client.emit("error", "You sent more than one OP 2 IDENTIFY payload while the websocket was open.");
-			if (this.resumeAddress) this.betterWs.address = this.resumeAddress;
-			this.connect();
-		}
-
-		// Authentication failed.
-		if (code === 4004) {
-			this.betterWs.address = this.identifyAddress;
-			this.client.emit("error", "Tried to connect with an invalid token");
-		}
-
-		// Not authenticated.
-		if (code === 4003) {
-			this.client.emit("error", "You tried to send a packet before sending an OP 2 IDENTIFY or OP 6 RESUME.");
-			if (this.resumeAddress) this.betterWs.address = this.resumeAddress;
-			else this.betterWs.address = this.identifyAddress;
-			this.connect();
-		}
-
-		// Decode error.
-		if (code === 4002) {
-			this.client.emit("error", "You sent an invalid payload");
-			if (this.resumeAddress) this.betterWs.address = this.resumeAddress;
-			else this.betterWs.address = this.identifyAddress;
-			this.connect();
-		}
-
-		// Invalid opcode.
-		if (code === 4001) {
-			this.client.emit("error", "You sent an invalid opcode or invalid payload for an opcode");
-			if (this.resumeAddress) this.betterWs.address = this.resumeAddress;
-			else this.betterWs.address = this.identifyAddress;
-			this.connect();
-		}
-
-		// Generic error / safe self closing code.
-		if (code === 4000 || code === 1001) {
-			if (this.reconnecting) gracefulClose = true;
-			else {
-				this.client.emit("error", `Error code ${code} received. Attempting to resume`);
-				if (this.resumeAddress && code !== 1001) this.betterWs.address = this.resumeAddress; // 1001 server going away. Reidentify
-				else this.betterWs.address = this.identifyAddress;
-				this.connect();
-			}
-		}
-
-		// Don't try to reconnect when true
-		if (code === 1000 && this._closing) gracefulClose = true;
 		this._closing = false;
 
 		this.emit("disconnect", code, reason, gracefulClose);
