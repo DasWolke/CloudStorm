@@ -40,7 +40,6 @@ interface DiscordConnector {
 	removeListener<E extends keyof ConnectorEvents>(event: E, listener: (...args: ConnectorEvents[E]) => any): this;
 }
 
-const recoverableErrorsRegex = /(?:EAI_AGAIN)|(?:ECONNRESET)/;
 const resumableCodes = [4008, 4005, 4003, 4002, 4001, 4000];
 const shouldntAttemptReconnectCodes = [4014, 4013, 4012, 4011, 4010, 4004, 1000];
 const disconnectMessages = {
@@ -65,27 +64,46 @@ const disconnectMessages = {
  * This class is automatically instantiated by the library and is documented for reference.
  */
 class DiscordConnector extends EventEmitter {
+	/** The options used by the client */
 	public options: DiscordConnector["client"]["options"];
+	/** If this connector will attempt to automatically reconnect */
 	public reconnect: boolean;
+	/** The WebSocket this connector uses */
 	public betterWs: BetterWs;
+	/** A Timeout that, when triggered, will send an op 1 heartbeat. Is null if Discord hasn't told this connector how often to heartbeat */
 	public heartbeatTimeout: NodeJS.Timeout | null = null;
+	/** How often this connector should heartbeat if not 0 */
 	public heartbeatInterval = 0;
+	/** The _trace as sent by the Discord READY and RESUMED payloads */
 	public _trace: string | null = null;
+	/** The sequence, which is the number of events received by Discord within the session if any session */
 	public seq = 0;
+	/** The status of this connector */
 	public status: "connecting" | "identifying" | "resuming" | "ready" | "disconnected" = "disconnected";
+	/** The session ID used for resuming or null if Discord hasn't sent one yet */
 	public sessionId: string | null = null;
+	/** The ms timestamp when this connector last received an op 11 heartbeat ack if not 0 */
 	public lastACKAt = 0;
+	/** The ms timestamp when this connector last sent an op 1 heartbeat if not 0 */
 	public lastHeartbeatSend = 0;
+	/** The time in milliseconds it took for Discord to send an op 11 heartbeat ack in response to an op 1 heartbeat */
 	public latency = 0;
-	private _closing = false;
+	/** The address the WebSocket will use to connect to the Discord gateway if not resuming */
 	public identifyAddress: string;
+	/** The address the WebSocket will use to connect to the Discord gateway if resuming */
 	public resumeAddress: string | null = null;
+	/** If this connector is disconnected/disconnecting currently, but will reconnect eventually */
 	public reconnecting = false;
+
+	/** If this connector is waiting to be fully closed */
+	private _closing = false;
+	/** If the disconnect method on this class was called and the connect method hasn't been called yet */
+	private _closeCalled = false;
 
 	public static readonly default = DiscordConnector;
 
 	/**
-	 * Create a new Discord Connector.
+	 * Creates a new Discord Connector.
 	 * @param id id of the shard that created this class.
 	 * @param client Main client instance.
 	 */
@@ -114,14 +132,14 @@ class DiscordConnector extends EventEmitter {
 	 */
 	public async connect(): Promise<void> {
 		this._closing = false;
+		this._closeCalled = false;
 		this.client.emit("debug", `Shard ${this.id} connecting to gateway`);
 		// The address should already be updated if resuming/identifying
 		return this.betterWs.connect()
-			.catch(error => {
-				const e = String(error);
-				if (recoverableErrorsRegex.test(e)) {
-					setTimeout(() => this.connect(), 5000);
-				}
+			.catch(() => { // All errors unless irrecoverable should attempt to reconnect
+				setTimeout(() => {
+					if (!this._closeCalled) this.connect();
+				}, 5000);
 			});
 	}
 
@@ -130,6 +148,7 @@ class DiscordConnector extends EventEmitter {
 	 */
 	public async disconnect(): Promise<void> {
 		this._closing = true;
+		this._closeCalled = true;
 		return this.betterWs.close(1000, "Disconnected by User");
 	}
 
@@ -191,8 +210,8 @@ class DiscordConnector extends EventEmitter {
 	 * @param resume Whether or not the client intends to send an OP 6 RESUME later.
 	 */
 	private async _reconnect(resume = false): Promise<void> {
-		if (resume) this.reconnecting = true;
 		if (this.betterWs.status === 2) return void this.client.emit("error", `Shard ${this.id} was attempting to ${resume ? "resume" : "reconnect"} while the WebSocket was still in the connecting state. This should never happen.`);
+		if (resume) this.reconnecting = true;
 		await this.betterWs.close(resume ? 4000 : 1012, "reconnecting");
 		if (resume) {
 			this.clearHeartBeat();
@@ -216,6 +235,9 @@ class DiscordConnector extends EventEmitter {
 		this.clearHeartBeat();
 	}
 
+	/**
+	 * Sets the this.heartbeatTimeout Interval.
+	 */
 	private setHeartBeat(): void {
 		this.heartbeatTimeout = setInterval(() => {
 			if (this.lastACKAt <= Date.now() - (this.heartbeatInterval + 5000)) {

@@ -4,8 +4,11 @@
  * RatelimitBucket, used for ratelimiting the execution of functions.
  */
 class RatelimitBucket {
+	/** Functions waiting to be executed. */
 	public fnQueue: Array<{ fn: () => unknown, callback: () => unknown; error: Error }>;
+	/** How many more functions can be executed before this bucket needs to wait to reset. */
 	public remaining: number;
+	/** The Timeout that when executed, will reset this bucket's remaining to the limit. Null if remaining is the limit. */
 	public resetTimeout: NodeJS.Timeout | null;
 
 	/**

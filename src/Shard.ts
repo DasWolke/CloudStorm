@@ -31,7 +31,9 @@ interface Shard {
  * This class is automatically instantiated by the library and is documented for reference.
  */
 class Shard extends EventEmitter {
+	/** If this shard has received the READY or RESUMED payload and isn't disconnected yet. */
 	public ready = false;
+	/** The connector that handles all of the Discord specific connection logic. */
 	public connector: DiscordConnector;
 
 	/**

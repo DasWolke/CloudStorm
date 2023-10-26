@@ -44,15 +44,21 @@ interface Client {
  * Main class used for receiving events and interacting with the Discord gateway.
  */
 class Client extends EventEmitter {
+	/** The Discord auth token to connect with. */
 	public token: string;
+	/** User specific options filled in with defaults if not specified. */
 	public options: Omit<import("./Types").IClientOptions, "snowtransferInstance"> & { token: string; endpoint?: string; };
-	public shardManager: ShardManager;
-	public version: string;
+	/** The manager of all of the shards used to connect to Discord. */
+	public shardManager = new ShardManager(this);
+	/** The version string of CloudStorm. */
+	public version = version;
+	/** The SnowTransfer instance to use to make some requests to get connect info. */
 	private _restClient: SnowTransfer;
 
 	/**
 	 * Create a new Client to connect to the Discord gateway.
 	 * @param token Token received from creating a discord bot user, which will be used to connect to the gateway.
+	 * @param options Baseline options to use. Will be filled with defaults if not specified.
 	 */
 	public constructor(token: string, options: import("./Types").IClientOptions = {}) {
 		super();
@@ -73,8 +79,6 @@ class Client extends EventEmitter {
 		this.token = token.startsWith("Bot ") ? token.substring(4) : token;
 		Object.assign(this.options, options);
 		this.options.token = token;
-		this.shardManager = new ShardManager(this);
-		this.version = version;
 	}
 
 	/**

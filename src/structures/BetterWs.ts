@@ -14,10 +14,8 @@ import { GATEWAY_OP_CODES } from "../Constants";
 
 import RatelimitBucket = require("./RatelimitBucket");
 
-import type {
-	GatewayReceivePayload,
-	GatewaySendPayload
-} from "discord-api-types/v10";
+import type { GatewayReceivePayload, GatewaySendPayload } from "discord-api-types/v10";
+import type { Socket } from "net";
 
 interface BWSEvents {
 	ws_open: [];
@@ -47,15 +45,32 @@ interface BetterWs {
  * Helper Class for simplifying the websocket connection to Discord.
  */
 class BetterWs extends EventEmitter {
+	/** The encoding to send/receive messages to/from the server with. */
 	public encoding: "etf" | "json";
+	/** If the messages sent/received are compressed with zlib. */
 	public compress: boolean;
+	/** The ratelimit bucket for how many packets this ws can send within a time frame. */
 	public wsBucket = new RatelimitBucket(120, 60000);
+	/** The ratelimit bucket for how many presence update specific packets this ws can send within a time frame. Is still affected by the overall packet send bucket. */
 	public presenceBucket = new RatelimitBucket(5, 60000);
 
-	private _socket: import("net").Socket | null;
-	private _internal: { closePromise: Promise<void> | null; zlib: import("zlib").Inflate | null; };
+	/** The raw net.Socket retreived from upgrading the connection or null if not upgraded/closed. */
+	private _socket: Socket | null;
+	/** Internal properties that need a funny way to be referenced. */
+	private _internal: {
+		/** A promise that resolves when the connection is fully closed or null if not closing the connection if any. */
+		closePromise: Promise<void> | null;
+		/** A zlib Inflate instance if messages sent/received are going to be compressed. Auto created on connect. */
+		zlib: import("zlib").Inflate | null;
+	};
+	/** If a request is going through to initiate a WebSocket connection and hasn't been upgraded by the server yet. */
 	private _connecting = false;
 
+	/**
+	 * Creates a new lightweight WebSocket.
+	 * @param address The http(s):// or ws(s):// URL cooresponding to the server to connect to.
+	 * @param options Options specific to this WebSocket.
+	 */
 	public constructor(public address: string, public options: import("../Types").IClientWSOptions) {
 		super();
 
@@ -69,7 +84,10 @@ class BetterWs extends EventEmitter {
 		};
 	}
 
-	public get status() {
+	/**
+	 * The state this WebSocket is in. 1 is connected, 2 is connecting, 3 is closing, and 4 is closed.
+	 */
+	public get status(): 1 | 2 | 3 | 4 {
 		const internal = this._internal;
 		if (this._connecting) return 2;
 		if (internal.closePromise) return 3; // closing
@@ -77,8 +95,11 @@ class BetterWs extends EventEmitter {
 		return 1; // connected
 	}
 
+	/**
+	 * Initiates a WebSocket connection to the server.
+	 */
 	public connect(): Promise<void> {
-		if (this._socket) return Promise.resolve(void 0);
+		if (this._socket || this._connecting) return Promise.resolve(void 0);
 		const key = randomBytes(16).toString("base64");
 		const url = new URL(this.address);
 		const useHTTPS = (url.protocol === "https:" || url.protocol === "wss:") || url.port === "443";
@@ -96,39 +117,23 @@ class BetterWs extends EventEmitter {
 		});
 		this._connecting = true;
 		return new Promise((resolve, reject) => {
-			req.on("upgrade", (res, socket) => {
-				const hash = createHash("sha1").update(key + "258EAFA5-E914-47DA-95CA-C5AB0DC85B11").digest("base64");
-				const accept = res.headers["sec-websocket-accept"];
-				if (hash !== accept) {
-					socket.end(() => {
-						this.emit("debug", "Failed websocket-key validation");
-						this._connecting = false;
-						reject(new Error(`Invalid Sec-Websocket-Accept | expected: ${hash} | received: ${accept}`));
-					});
-					return;
-				}
-				socket.on("error", this._onError.bind(this));
-				socket.on("close", this._onClose.bind(this));
-				socket.on("readable", this._onReadable.bind(this));
-				this._socket = socket;
+			const upgrade = this._onUpgrade.bind(this, key, req, resolve, reject);
+			req.once("upgrade", upgrade);
+			req.once("error", e => { // Promises can only be resolved/rejected once. _onUpgrade removes all req error events after resolve
 				this._connecting = false;
-				if (this.compress) {
-					const z = createInflate();
-					// @ts-ignore
-					z._c = z.close; z._h = z._handle; z._hc = z._handle.close; z._v = () => void 0;
-					this._internal.zlib = z;
-				}
-				this.emit("ws_open");
-				resolve(void 0);
-			});
-			req.on("error", e => {
-				this._connecting = false;
+				req.removeListener("upgrade", upgrade);
 				reject(e);
 			});
 			req.end();
 		});
 	}
 
+	/**
+	 * Disconnects from the server.
+	 * @param code The close code.
+	 * @param reason The reason for closing if any.
+	 * @returns A Promise that resolves when the connection is fully closed.
+	 */
 	public async close(code: number, reason?: string): Promise<void> {
 		const internal = this._internal;
 		if (internal.closePromise) return internal.closePromise;
@@ -147,6 +152,11 @@ class BetterWs extends EventEmitter {
 		return promise;
 	}
 
+	/**
+	 * Sends a message to the server in the format of { op: number, d: any } (before any encoding/compression).
+	 * @param data What to send to the server.
+	 * @returns A Promise that resolves when the message passes the bucket queue(s) and is written to the socket's Buffer to send.
+	 */
 	public sendMessage(data: GatewaySendPayload): Promise<void> {
 		if (!isValidRequest(data)) return Promise.reject(new Error("Invalid request"));
 
@@ -168,7 +178,12 @@ class BetterWs extends EventEmitter {
 		});
 	}
 
-	private _write(packet: Buffer, opcode: number) {
+	/**
+	 * Method to raw write messages to the server.
+	 * @param packet Buffer containing the message to send.
+	 * @param opcode WebSocket spec op code.
+	 */
+	private _write(packet: Buffer, opcode: number): void {
 		const socket = this._socket;
 		if (!socket?.writable) return;
 		const length = packet.length;
@@ -192,13 +207,56 @@ class BetterWs extends EventEmitter {
 		socket.write(frame);
 	}
 
-	private _onError(error: Error) {
+	/**
+	 * Handler for when requests from connect are upgraded to WebSockets.
+	 * @param key The sec key from connect.
+	 * @param req The HTTP request from connect.
+	 * @param resolve Promise resolver from connect.
+	 * @param reject Promise rejector from connect.
+	 * @param res The HTTP response from the server from connect.
+	 * @param socket The raw socket from upgrading the request from connect.
+	 */
+	private _onUpgrade(key: string, req: http.ClientRequest, resolve: (value: void | PromiseLike<void>) => void, reject: (reason?: any) => void, res: http.IncomingMessage, socket: Socket): void {
+		const hash = createHash("sha1").update(key + "258EAFA5-E914-47DA-95CA-C5AB0DC85B11").digest("base64");
+		const accept = res.headers["sec-websocket-accept"];
+		if (hash !== accept) {
+			socket.end(() => {
+				this.emit("debug", "Failed websocket-key validation");
+				this._connecting = false;
+				reject(new Error(`Invalid Sec-Websocket-Accept | expected: ${hash} | received: ${accept}`));
+			});
+			return;
+		}
+		socket.once("error", this._onError.bind(this)); // the conection is closed after 1 error
+		socket.once("close", this._onClose.bind(this)); // socket gets de-referenced from this on close
+		socket.on("readable", this._onReadable.bind(this));
+		this._socket = socket;
+		this._connecting = false;
+		if (this.compress) {
+			const z = createInflate();
+			// @ts-ignore
+			z._c = z.close; z._h = z._handle; z._hc = z._handle.close; z._v = () => void 0;
+			this._internal.zlib = z;
+		}
+		this.emit("ws_open");
+		resolve(void 0);
+		req.removeAllListeners("error");
+	}
+
+	/**
+	 * Handler for when the raw socket to the server encounters an error.
+	 * @param error What happened.
+	 */
+	private _onError(error: Error): void {
 		if (!this._socket) return;
 		this.emit("debug", util.inspect(error, true, 1, false));
 		this._write(Buffer.allocUnsafe(0), 8);
 	}
 
-	private _onClose() {
+	/**
+	 * Handler for when the raw socket is fully closed and cleans up this WebSocket.
+	 */
+	private _onClose(): void {
 		const socket = this._socket;
 		const internal = this._internal;
 		if (!socket) return;
@@ -216,7 +274,10 @@ class BetterWs extends EventEmitter {
 		if (internal.closePromise) internal.closePromise.resolve(void 0);
 	}
 
-	private _onReadable() {
+	/**
+	 * Handler for when there is data in the socket's Buffer to read.
+	 */
+	private _onReadable(): void {
 		const socket = this._socket;
 		while((socket?.readableLength || 0) > 1) {
 			let length = readRange(socket!, 1, 1) & 127;
@@ -236,7 +297,12 @@ class BetterWs extends EventEmitter {
 		}
 	}
 
-	private _processFrame(opcode: number, message: Buffer) {
+	/**
+	 * Transforms/reads raw messages from the server and emits the appropriate event.
+	 * @param opcode WebSocket spec op code.
+	 * @param message Buffer of data to transform/read.
+	 */
+	private _processFrame(opcode: number, message: Buffer): void {
 		const internal = this._internal;
 		switch (opcode) {
 		case 1: {
@@ -303,11 +369,11 @@ class BetterWs extends EventEmitter {
 	}
 }
 
-function isValidRequest(value: GatewaySendPayload) {
+function isValidRequest(value: GatewaySendPayload): boolean {
 	return value && typeof value === "object" && Number.isInteger(value.op) && typeof value.d !== "undefined";
 }
 
-function readRange(socket: import("net").Socket, index: number, bytes: number) {
+function readRange(socket: import("net").Socket, index: number, bytes: number): number {
 	// @ts-ignore
 	let head = socket._readableState.buffer.head;
 	let cursor = 0;
@@ -325,7 +391,7 @@ function readRange(socket: import("net").Socket, index: number, bytes: number) {
 	throw new Error("readRange failed?");
 }
 
-function readETF(data: Buffer, start: number) {
+function readETF(data: Buffer, start: number): Record<any, any> | null | undefined {
 	let view: DataView | undefined;
 	let x = start;
 	const loop = () => {
@@ -443,7 +509,7 @@ function readETF(data: Buffer, start: number) {
 	return loop();
 }
 
-function writeETF(data: any) {
+function writeETF(data: any): Buffer {
 	const b = Buffer.allocUnsafe(1 << 12);
 	b[0] = 131;
 	let i = 1;

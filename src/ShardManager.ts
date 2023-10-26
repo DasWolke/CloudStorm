@@ -9,19 +9,20 @@ import RatelimitBucket = require("./structures/RatelimitBucket");
  * This class is automatically instantiated by the library and is documented for reference.
  */
 class ShardManager {
+	/** The options used by the client */
 	public options: ShardManager["client"]["options"];
-	public shards: { [id: number]: Shard };
-	public identifyBucket: RatelimitBucket;
+	/** A Record of shards keyed by their ID */
+	public shards: { [id: number]: Shard } = {};
+	/** The bucket used to identify a certain number of shards within a day. */
+	public identifyBucket = new RatelimitBucket(1000, 1000 * 60 * 60 * 24, 1000 * 60 * 60 * 24);
+	/** The bucket used to identify x number of shards within 5 second intervals. Larger bots benefit from this, but doesn't change how many times per day any shards can identify. */
 	public concurrencyBucket: RatelimitBucket | null = null;
 
 	/**
 	 * Create a new ShardManager.
 	 */
 	public constructor(public client: import("events").EventEmitter & { options: Omit<import("./Types").IClientOptions, "snowtransferInstance"> & { token: string; endpoint?: string; } }) {
-		this.client = client;
 		this.options = client.options;
-		this.shards = {};
-		this.identifyBucket = new RatelimitBucket(1000, 1000 * 60 * 60 * 24, 1000 * 60 * 60 * 24);
 	}
 
 	/**
@@ -29,7 +30,7 @@ class ShardManager {
 	 */
 	public spawn(): void {
 		if (!this.concurrencyBucket) throw new Error("Trying to spawn shards without calling Client.connect()");
-		for (const id of (this.options.shards === "auto" ? Array(this.options.totalShards).fill(0).map((_, index) => index) : this.options.shards || [0])) {
+		for (const id of (this.options.shards === "auto" ? Array(this.options.totalShards).fill(0).map((_, index) => index) : this.options.shards ?? [0])) {
 			this.client.emit("debug", `Spawned shard ${id}`);
 			this.shards[id] = new Shard(id, this.client);
 			this._addListener(this.shards[id]);
