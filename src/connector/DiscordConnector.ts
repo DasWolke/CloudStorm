@@ -99,6 +99,8 @@ class DiscordConnector extends EventEmitter {
 	private _closing = false;
 	/** If the disconnect method on this class was called and the connect method hasn't been called yet */
 	private _closeCalled = false;
+	/** A Timeout that, when triggered, closes the connection because op HELLO hasn't been received and may never be received */
+	private _openToHeartbeatTimeout: NodeJS.Timeout | null = null;
 
 	public static readonly default = DiscordConnector;
 
@@ -120,6 +122,7 @@ class DiscordConnector extends EventEmitter {
 			this.status = "connecting";
 			this.emit("stateChange", "connecting");
 			this.reconnecting = false;
+			this._openToHeartbeatTimeout = setTimeout(() => this._reconnect(true), 10000);
 		});
 		this.betterWs.on("ws_receive", msg => this.messageAction(msg));
 		this.betterWs.on<"ws_close">("ws_close", (code, reason) => this.handleWsClose(code, reason));
@@ -187,6 +190,7 @@ class DiscordConnector extends EventEmitter {
 			break;
 
 		case OP.HELLO:
+			if (this._openToHeartbeatTimeout) clearTimeout(this._openToHeartbeatTimeout);
 			this.client.emit("debug", `Shard ${this.id} received HELLO`);
 			this.heartbeat();
 			this.heartbeatInterval = withShardID.d.heartbeat_interval;

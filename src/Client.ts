@@ -49,7 +49,7 @@ class Client extends EventEmitter {
 	/** User specific options filled in with defaults if not specified. */
 	public options: Omit<import("./Types").IClientOptions, "snowtransferInstance"> & { token: string; endpoint?: string; };
 	/** The manager of all of the shards used to connect to Discord. */
-	public shardManager = new ShardManager(this);
+	public shardManager: ShardManager;
 	/** The version string of CloudStorm. */
 	public version = version;
 	/** The SnowTransfer instance to use to make some requests to get connect info. */
@@ -79,6 +79,7 @@ class Client extends EventEmitter {
 		this.token = token.startsWith("Bot ") ? token.substring(4) : token;
 		Object.assign(this.options, options);
 		this.options.token = token;
+		this.shardManager = new ShardManager(this);
 	}
 
 	/**
