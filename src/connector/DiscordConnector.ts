@@ -58,6 +58,8 @@ const disconnectMessages = {
 	4001: "You sent an invalid opcode or invalid payload for an opcode."
 };
 
+const wsStatusTypes = ["Whatever 0 is. Report if you see this", "connected", "connecting", "closing", "closed"];
+
 /**
  * Class used for acting based on received events.
  *
@@ -192,7 +194,7 @@ class DiscordConnector extends EventEmitter {
 		case OP.HELLO:
 			if (this._openToHeartbeatTimeout) clearTimeout(this._openToHeartbeatTimeout);
 			this.client.emit("debug", `Shard ${this.id} received HELLO`);
-			this.heartbeat();
+			this.lastACKAt = Date.now();
 			this.heartbeatInterval = withShardID.d.heartbeat_interval;
 			this.setHeartBeat();
 			this._trace = (withShardID.d as unknown as { _trace: string })._trace;
@@ -266,7 +268,7 @@ class DiscordConnector extends EventEmitter {
 	 * @param force Whether CloudStorm should send an OP 2 IDENTIFY even if there's a session that could be resumed.
 	 */
 	public async identify(force?: boolean): Promise<void> {
-		if (this.betterWs.status !== 1) void this.client.emit("error", `Shard ${this.id} was attempting to identify when the ws was not open`);
+		if (this.betterWs.status !== 1) void this.client.emit("error", `Shard ${this.id} was attempting to identify when the ws was not open. Was ${wsStatusTypes[this.betterWs.status]}`);
 		if (this.sessionId && !force) return this.resume();
 		this.client.emit("debug", `Shard ${this.id} is identifying`);
 
@@ -296,7 +298,7 @@ class DiscordConnector extends EventEmitter {
 	 * Send an OP 6 RESUME to the gateway.
 	 */
 	public async resume(): Promise<void> {
-		if (this.betterWs.status !== 1) return void this.client.emit("error", `Shard ${this.id} was attempting to resume when the ws was not open`);
+		if (this.betterWs.status !== 1) return void this.client.emit("error", `Shard ${this.id} was attempting to resume when the ws was not open. Was ${wsStatusTypes[this.betterWs.status]}`);
 		this.client.emit("debug", `Shard ${this.id} is resuming`);
 		this.status = "resuming";
 		this.emit("stateChange", "resuming");
@@ -310,8 +312,8 @@ class DiscordConnector extends EventEmitter {
 	 * Send an OP 1 HEARTBEAT to the gateway.
 	 */
 	private heartbeat(): void {
-		if (this.betterWs.status !== 1) return void this.client.emit("error", `Shard ${this.id} was attempting to heartbeat when the ws was not open`);
-		this.betterWs.sendMessage({ op: OP.HEARTBEAT, d: this.seq });
+		if (this.betterWs.status !== 1) return void this.client.emit("error", `Shard ${this.id} was attempting to heartbeat when the ws was not open. Was ${wsStatusTypes[this.betterWs.status]}`);
+		this.betterWs.sendMessage({ op: OP.HEARTBEAT, d: this.seq === 0 ? null : this.seq });
 		this.lastHeartbeatSend = Date.now();
 	}
 
