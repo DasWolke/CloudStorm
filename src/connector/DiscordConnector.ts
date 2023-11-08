@@ -40,7 +40,7 @@ interface DiscordConnector {
 	removeListener<E extends keyof ConnectorEvents>(event: E, listener: (...args: ConnectorEvents[E]) => any): this;
 }
 
-const resumableCodes = [4008, 4005, 4003, 4002, 4001, 4000];
+const resumableCodes = [4008, 4005, 4003, 4002, 4001, 4000, 1001];
 const shouldntAttemptReconnectCodes = [4014, 4013, 4012, 4011, 4010, 4004, 1000];
 const disconnectMessages = {
 	4014: "Disallowed Intents, check your client options and application page.",
@@ -103,6 +103,8 @@ class DiscordConnector extends EventEmitter {
 	private _closeCalled = false;
 	/** A Timeout that, when triggered, closes the connection because op HELLO hasn't been received and may never be received */
 	private _openToHeartbeatTimeout: NodeJS.Timeout | null = null;
+	/** A Timeout that, when triggered, sends the first heartbeat */
+	private _initialHeartbeatTimeout: NodeJS.Timeout | null = null;
 
 	public static readonly default = DiscordConnector;
 
@@ -196,7 +198,7 @@ class DiscordConnector extends EventEmitter {
 			this.client.emit("debug", `Shard ${this.id} received HELLO`);
 			this.lastACKAt = Date.now();
 			this.heartbeatInterval = withShardID.d.heartbeat_interval;
-			this.setHeartBeat();
+			this._initialHeartbeatTimeout = setTimeout(() => this.heartbeat(), this.heartbeatInterval * Math.random());
 			this._trace = (withShardID.d as unknown as { _trace: string })._trace;
 			this.emit("queueIdentify", this.id);
 			break;
@@ -259,7 +261,9 @@ class DiscordConnector extends EventEmitter {
 	 */
 	private clearHeartBeat(): void {
 		if (this.heartbeatTimeout) clearInterval(this.heartbeatTimeout);
+		if (this._initialHeartbeatTimeout) clearTimeout(this._initialHeartbeatTimeout);
 		this.heartbeatTimeout = null;
+		this._initialHeartbeatTimeout = null;
 		this.heartbeatInterval = 0;
 	}
 
@@ -315,6 +319,11 @@ class DiscordConnector extends EventEmitter {
 		if (this.betterWs.status !== 1) return void this.client.emit("error", `Shard ${this.id} was attempting to heartbeat when the ws was not open. Was ${wsStatusTypes[this.betterWs.status]}`);
 		this.betterWs.sendMessage({ op: OP.HEARTBEAT, d: this.seq === 0 ? null : this.seq });
 		this.lastHeartbeatSend = Date.now();
+		if (this._initialHeartbeatTimeout) {
+			clearTimeout(this._initialHeartbeatTimeout);
+			this._initialHeartbeatTimeout = null;
+		}
+		if (!this.heartbeatTimeout) this.setHeartBeat();
 	}
 
 	/**

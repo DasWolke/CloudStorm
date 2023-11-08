@@ -55,16 +55,23 @@ class BetterWs extends EventEmitter {
 	public presenceBucket = new RatelimitBucket(5, 60000);
 
 	/** The raw net.Socket retreived from upgrading the connection or null if not upgraded/closed. */
-	private _socket: Socket | null;
+	private _socket: Socket | null = null;
 	/** Internal properties that need a funny way to be referenced. */
 	private _internal: {
 		/** A promise that resolves when the connection is fully closed or null if not closing the connection if any. */
 		closePromise: Promise<void> | null;
 		/** A zlib Inflate instance if messages sent/received are going to be compressed. Auto created on connect. */
 		zlib: import("zlib").Inflate | null;
-	};
+	} = {
+			closePromise: null,
+			zlib: null
+		};
 	/** If a request is going through to initiate a WebSocket connection and hasn't been upgraded by the server yet. */
 	private _connecting = false;
+	/** Code received from frame op 8 */
+	private _lastCloseCode: number | null = null;
+	/** Reason received from frame op 8 */
+	private _lastCloseReason: string | null = null;
 
 	/**
 	 * Creates a new lightweight WebSocket.
@@ -76,12 +83,6 @@ class BetterWs extends EventEmitter {
 
 		this.encoding = options.encoding === "etf" ? "etf" : "json";
 		this.compress = options.compress ?? false;
-
-		this._socket = null;
-		this._internal = {
-			closePromise: null,
-			zlib: null,
-		};
 	}
 
 	/**
@@ -262,10 +263,12 @@ class BetterWs extends EventEmitter {
 		if (!socket) return;
 		socket.removeListener("data", this._onReadable);
 		socket.removeListener("error", this._onError);
-		socket.removeListener("close", this._onClose);
 		this.wsBucket.dropQueue();
 		this.presenceBucket.dropQueue();
 		this._socket = null;
+		this.emit("ws_close", this._lastCloseCode ?? 1006, this._lastCloseReason ?? "Abnormal Closure");
+		this._lastCloseCode = null;
+		this._lastCloseReason = null;
 		if (internal.zlib) {
 			internal.zlib.close();
 			internal.zlib = null;
@@ -355,10 +358,9 @@ class BetterWs extends EventEmitter {
 			break;
 		}
 		case 8: {
-			const code = message.length > 1 ? (message[0] << 8) + message[1] : 0;
-			const reason = message.length > 2 ? message.subarray(2).toString() : "";
-			this.emit("ws_close", code, reason);
-			this._write(Buffer.from([code >> 8, code & 255]), 8);
+			this._lastCloseCode = message.length > 1 ? (message[0] << 8) + message[1] : 0;
+			this._lastCloseReason = message.length > 2 ? message.subarray(2).toString() : "";
+			this._write(Buffer.from([this._lastCloseCode >> 8, this._lastCloseCode & 255]), 8);
 			break;
 		}
 		case 9: {
