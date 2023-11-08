@@ -40,7 +40,7 @@ interface DiscordConnector {
 	removeListener<E extends keyof ConnectorEvents>(event: E, listener: (...args: ConnectorEvents[E]) => any): this;
 }
 
-const resumableCodes = [4008, 4005, 4003, 4002, 4001, 4000, 1001];
+const resumableCodes = [4008, 4005, 4003, 4002, 4001, 4000, 1006, 1001];
 const shouldntAttemptReconnectCodes = [4014, 4013, 4012, 4011, 4010, 4004, 1000];
 const disconnectMessages = {
 	4014: "Disallowed Intents, check your client options and application page.",
