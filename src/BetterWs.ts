@@ -125,6 +125,7 @@ class BetterWs extends EventEmitter {
 			this._internal.openRejector = reject;
 			const upgrade = this._onUpgrade.bind(this, key, req, resolve, reject);
 			onErrorRef = e => { // Promises can only be resolved/rejected once. _onUpgrade removes all req error events after resolve
+				this._internal.openRejector = null;
 				cameFromOnError = true;
 				this._connecting = false;
 				req.removeListener("upgrade", upgrade);

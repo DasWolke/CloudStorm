@@ -129,7 +129,7 @@ class DiscordConnector extends EventEmitter {
 			this.emit("stateChange", "connecting");
 			this.reconnecting = false;
 			this._openToHeartbeatTimeout = setTimeout(() => {
-				this.client.emit("debug", `Shard ${this.id} didn't receive a heartbeat after the ws was opened in time`);
+				this.client.emit("debug", `Shard ${this.id} didn't receive a HELLO after the ws was opened in time`);
 				this._reconnect(true);
 			}, 10000);
 		});
