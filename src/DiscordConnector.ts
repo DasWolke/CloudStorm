@@ -1,9 +1,9 @@
 "use strict";
 
 import { EventEmitter } from "events";
-import BetterWs = require("../structures/BetterWs");
-import { GATEWAY_OP_CODES as OP, GATEWAY_VERSION } from "../Constants";
-import Intents = require("../Intents");
+import BetterWs = require("./BetterWs");
+import { GATEWAY_OP_CODES as OP, GATEWAY_VERSION } from "./Constants";
+import Intents = require("./Intents");
 
 import type {
 	GatewayReceivePayload,
@@ -57,6 +57,8 @@ const disconnectMessages = {
 	4002: "You sent an invalid payload.",
 	4001: "You sent an invalid opcode or invalid payload for an opcode."
 };
+
+const connectionError = new Error("WS took too long to connect. Is your internet okay?");
 
 const wsStatusTypes = ["Whatever 0 is. Report if you see this", "connected", "connecting", "closing", "closed"];
 
@@ -113,7 +115,7 @@ class DiscordConnector extends EventEmitter {
 	 * @param id id of the shard that created this class.
 	 * @param client Main client instance.
 	 */
-	public constructor(public id: number, public client: EventEmitter & { options: Omit<import("../Types").IClientOptions, "snowtransferInstance"> & { token: string; endpoint?: string; } }) {
+	public constructor(public id: number, public client: EventEmitter & { options: Omit<import("./Types").IClientOptions, "snowtransferInstance"> & { token: string; endpoint?: string; } }) {
 		super();
 
 		this.options = client.options;
@@ -126,7 +128,10 @@ class DiscordConnector extends EventEmitter {
 			this.status = "connecting";
 			this.emit("stateChange", "connecting");
 			this.reconnecting = false;
-			this._openToHeartbeatTimeout = setTimeout(() => this._reconnect(true), 10000);
+			this._openToHeartbeatTimeout = setTimeout(() => {
+				this.client.emit("debug", `Shard ${this.id} didn't receive a heartbeat after the ws was opened in time`);
+				this._reconnect(true);
+			}, 10000);
 		});
 		this.betterWs.on("ws_receive", msg => this.messageAction(msg));
 		this.betterWs.on<"ws_close">("ws_close", (code, reason) => this.handleWsClose(code, reason));
@@ -143,7 +148,8 @@ class DiscordConnector extends EventEmitter {
 		this.client.emit("debug", `Shard ${this.id} connecting to gateway`);
 		// The address should already be updated if resuming/identifying
 		return this.betterWs.connect()
-			.catch(() => { // All errors unless irrecoverable should attempt to reconnect
+			.catch(e => { // All errors unless irrecoverable should attempt to reconnect
+				if (e === connectionError) return;
 				setTimeout(() => {
 					if (!this._closeCalled) this.connect();
 				}, 5000);
@@ -165,7 +171,7 @@ class DiscordConnector extends EventEmitter {
 	 */
 	private async messageAction(message: GatewayReceivePayload): Promise<void> {
 		this.client.emit("rawReceive", message);
-		const withShardID: import("../Types").IGatewayMessage = Object.assign(message, { shard_id: this.id });
+		const withShardID: import("./Types").IGatewayMessage = Object.assign(message, { shard_id: this.id });
 		this.client.emit("event", withShardID);
 
 		switch (withShardID.op) {
@@ -218,8 +224,8 @@ class DiscordConnector extends EventEmitter {
 	 * @param resume Whether or not the client intends to send an OP 6 RESUME later.
 	 */
 	private async _reconnect(resume = false): Promise<void> {
-		if (this.betterWs.status === 2) return void this.client.emit("error", `Shard ${this.id} was attempting to ${resume ? "resume" : "reconnect"} while the WebSocket was still in the connecting state. This should never happen.`);
-		if (resume) this.reconnecting = true;
+		this.betterWs._internal.openRejector?.(connectionError); // If the client is still attempting to connect, but _reconnect is *somehow* called, destroy the request and just try to reconnect.
+		this.reconnecting = resume;
 		await this.betterWs.close(resume ? 4000 : 1012, "reconnecting");
 		if (resume) {
 			this.clearHeartBeat();
@@ -272,7 +278,10 @@ class DiscordConnector extends EventEmitter {
 	 * @param force Whether CloudStorm should send an OP 2 IDENTIFY even if there's a session that could be resumed.
 	 */
 	public async identify(force?: boolean): Promise<void> {
-		if (this.betterWs.status !== 1) void this.client.emit("error", `Shard ${this.id} was attempting to identify when the ws was not open. Was ${wsStatusTypes[this.betterWs.status]}`);
+		if (this.betterWs.status !== 1) {
+			this.client.emit("error", `Shard ${this.id} was attempting to identify when the ws was not open. Was ${wsStatusTypes[this.betterWs.status]}`);
+			return this._reconnect(true);
+		}
 		if (this.sessionId && !force) return this.resume();
 		this.client.emit("debug", `Shard ${this.id} is identifying`);
 
@@ -302,7 +311,10 @@ class DiscordConnector extends EventEmitter {
 	 * Send an OP 6 RESUME to the gateway.
 	 */
 	public async resume(): Promise<void> {
-		if (this.betterWs.status !== 1) return void this.client.emit("error", `Shard ${this.id} was attempting to resume when the ws was not open. Was ${wsStatusTypes[this.betterWs.status]}`);
+		if (this.betterWs.status !== 1) {
+			this.client.emit("error", `Shard ${this.id} was attempting to resume when the ws was not open. Was ${wsStatusTypes[this.betterWs.status]}`);
+			return this._reconnect(true);
+		}
 		this.client.emit("debug", `Shard ${this.id} is resuming`);
 		this.status = "resuming";
 		this.emit("stateChange", "resuming");
@@ -316,7 +328,10 @@ class DiscordConnector extends EventEmitter {
 	 * Send an OP 1 HEARTBEAT to the gateway.
 	 */
 	private heartbeat(): void {
-		if (this.betterWs.status !== 1) return void this.client.emit("error", `Shard ${this.id} was attempting to heartbeat when the ws was not open. Was ${wsStatusTypes[this.betterWs.status]}`);
+		if (this.betterWs.status !== 1) {
+			this.client.emit("error", `Shard ${this.id} was attempting to heartbeat when the ws was not open. Was ${wsStatusTypes[this.betterWs.status]}`);
+			return void this._reconnect(true);
+		}
 		this.betterWs.sendMessage({ op: OP.HEARTBEAT, d: this.seq === 0 ? null : this.seq });
 		this.lastHeartbeatSend = Date.now();
 		if (this._initialHeartbeatTimeout) {
@@ -330,7 +345,7 @@ class DiscordConnector extends EventEmitter {
 	 * Handle dispatch events.
 	 * @param message Message received from the websocket.
 	 */
-	private handleDispatch(message: import("../Types").IGatewayDispatch): void {
+	private handleDispatch(message: import("./Types").IGatewayDispatch): void {
 		this.client.emit("dispatch", message);
 
 		if (message.s) { // sequence is from dispatch

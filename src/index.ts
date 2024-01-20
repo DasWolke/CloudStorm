@@ -5,7 +5,7 @@ import Intents = require("./Intents");
 import Shard = require("./Shard");
 import ShardManager = require("./ShardManager");
 
-import BetterWs = require("./structures/BetterWs");
+import BetterWs = require("./BetterWs");
 
 export { BetterWs, Client, Constants, Intents, Shard, ShardManager };
 export * from "./Types";

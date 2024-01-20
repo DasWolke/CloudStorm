@@ -1,7 +1,7 @@
 "use strict";
 
 import Shard = require("./Shard");
-import RatelimitBucket = require("./structures/RatelimitBucket");
+import { LocalBucket } from "snowtransfer";
 
 /**
  * Class used for managing shards for the user.
@@ -14,9 +14,9 @@ class ShardManager {
 	/** A Record of shards keyed by their ID */
 	public shards: { [id: number]: Shard } = {};
 	/** The bucket used to identify a certain number of shards within a day. */
-	public identifyBucket = new RatelimitBucket(1000, 1000 * 60 * 60 * 24, 1000 * 60 * 60 * 24);
+	public identifyBucket = new LocalBucket(1000, 1000 * 60 * 60 * 24);
 	/** The bucket used to identify x number of shards within 5 second intervals. Larger bots benefit from this, but doesn't change how many times per day any shards can identify. */
-	public concurrencyBucket: RatelimitBucket | null = null;
+	public concurrencyBucket: LocalBucket | null = null;
 
 	/**
 	 * Create a new ShardManager.

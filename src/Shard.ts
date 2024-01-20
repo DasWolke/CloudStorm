@@ -1,7 +1,7 @@
 "use strict";
 
 import { EventEmitter } from "events";
-import DiscordConnector = require("./connector/DiscordConnector");
+import DiscordConnector = require("./DiscordConnector");
 
 interface ShardEvents {
 	disconnect: [number, string, boolean];

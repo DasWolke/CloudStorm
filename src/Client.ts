@@ -3,9 +3,8 @@
 const version = require("../package.json").version as string;
 import { EventEmitter } from "events";
 import Constants = require("./Constants");
-import { SnowTransfer } from "snowtransfer";
+import { SnowTransfer, LocalBucket } from "snowtransfer";
 import ShardManager = require("./ShardManager");
-import RatelimitBucket = require("./structures/RatelimitBucket");
 import type {
 	GatewaySendPayload,
 	GatewayReceivePayload
@@ -101,22 +100,22 @@ class Client extends EventEmitter {
 	public async fetchConnectInfo(): Promise<number> {
 		const gateway = await this.getGatewayBot();
 		this._updateEndpoint(gateway.url);
-		const oldQueueConcurrency = [] as Array<[() => unknown, () => unknown]>;
-		const oldQueueIdentify = [] as Array<[() => unknown, () => unknown]>;
+		const oldQueueConcurrency = [] as Array<() => unknown>;
+		const oldQueueIdentify = [] as Array<() => unknown>;
 		if (this.shardManager.concurrencyBucket?.fnQueue.length) {
-			oldQueueConcurrency.push(...this.shardManager.concurrencyBucket.fnQueue.map(i => [i.fn, i.callback] as [() => unknown, () => unknown]));
+			oldQueueConcurrency.push(...this.shardManager.concurrencyBucket.fnQueue);
 			this.shardManager.concurrencyBucket.dropQueue();
 		}
-		if (this.shardManager.identifyBucket.fnQueue.length) oldQueueIdentify.push(...this.shardManager.identifyBucket.fnQueue.map(i => [i.fn, i.callback] as [() => unknown, () => unknown]));
+		if (this.shardManager.identifyBucket.fnQueue.length) oldQueueIdentify.push(...this.shardManager.identifyBucket.fnQueue);
 		this.shardManager.identifyBucket.dropQueue();
-		this.shardManager.concurrencyBucket = new RatelimitBucket(gateway.session_start_limit.max_concurrency, 5000);
+		this.shardManager.concurrencyBucket = new LocalBucket(gateway.session_start_limit.max_concurrency, 5000);
 		this.shardManager.identifyBucket.remaining = gateway.session_start_limit.remaining;
-		this.shardManager.identifyBucket.limitReset = gateway.session_start_limit.reset_after;
-		for (const [fn, callback] of oldQueueConcurrency) {
-			this.shardManager.concurrencyBucket.queue(fn).then(callback);
+		this.shardManager.identifyBucket.reset = gateway.session_start_limit.reset_after;
+		for (const fn of oldQueueConcurrency) {
+			this.shardManager.concurrencyBucket.queue(fn);
 		}
-		for (const [fn, callback] of oldQueueIdentify) {
-			this.shardManager.identifyBucket.queue(fn).then(callback);
+		for (const fn of oldQueueIdentify) {
+			this.shardManager.identifyBucket.queue(fn);
 		}
 		return gateway.shards;
 	}

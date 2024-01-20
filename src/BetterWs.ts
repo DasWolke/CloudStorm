@@ -10,9 +10,9 @@ import { createInflate, inflateSync, constants } from "zlib";
 import https = require("https");
 import http = require("http");
 import util = require("util");
-import { GATEWAY_OP_CODES } from "../Constants";
+import { GATEWAY_OP_CODES } from "./Constants";
 
-import RatelimitBucket = require("./RatelimitBucket");
+import { LocalBucket } from "snowtransfer";
 
 import type { GatewayReceivePayload, GatewaySendPayload } from "discord-api-types/v10";
 import type { Socket } from "net";
@@ -50,19 +50,21 @@ class BetterWs extends EventEmitter {
 	/** If the messages sent/received are compressed with zlib. */
 	public compress: boolean;
 	/** The ratelimit bucket for how many packets this ws can send within a time frame. */
-	public wsBucket = new RatelimitBucket(120, 60000);
+	public wsBucket = new LocalBucket(120, 60000);
 	/** The ratelimit bucket for how many presence update specific packets this ws can send within a time frame. Is still affected by the overall packet send bucket. */
-	public presenceBucket = new RatelimitBucket(5, 60000);
+	public presenceBucket = new LocalBucket(5, 60000);
 
 	/** The raw net.Socket retreived from upgrading the connection or null if not upgraded/closed. */
 	private _socket: Socket | null = null;
 	/** Internal properties that need a funny way to be referenced. */
-	private _internal: {
+	public _internal: {
+		openRejector: ((reason?: any) => void) | null;
 		/** A promise that resolves when the connection is fully closed or null if not closing the connection if any. */
 		closePromise: Promise<void> | null;
 		/** A zlib Inflate instance if messages sent/received are going to be compressed. Auto created on connect. */
 		zlib: import("zlib").Inflate | null;
 	} = {
+			openRejector: null,
 			closePromise: null,
 			zlib: null
 		};
@@ -78,10 +80,10 @@ class BetterWs extends EventEmitter {
 	 * @param address The http(s):// or ws(s):// URL cooresponding to the server to connect to.
 	 * @param options Options specific to this WebSocket.
 	 */
-	public constructor(public address: string, public options: import("../Types").IClientWSOptions) {
+	public constructor(public address: string, public options: import("./Types").IClientWSOptions) {
 		super();
 
-		this.encoding = options.encoding === "etf" ? "etf" : "json";
+		this.encoding = options.encoding ?? "json";
 		this.compress = options.compress ?? false;
 	}
 
@@ -101,6 +103,7 @@ class BetterWs extends EventEmitter {
 	 */
 	public connect(): Promise<void> {
 		if (this._socket || this._connecting) return Promise.resolve(void 0);
+		this._connecting = true;
 		const key = randomBytes(16).toString("base64");
 		const url = new URL(this.address);
 		const useHTTPS = (url.protocol === "https:" || url.protocol === "wss:") || url.port === "443";
@@ -116,16 +119,27 @@ class BetterWs extends EventEmitter {
 				"Sec-WebSocket-Version": "13",
 			}
 		});
-		this._connecting = true;
-		return new Promise((resolve, reject) => {
+		let onErrorRef: ((e: Error) => void) | undefined;
+		let cameFromOnError = false;
+		return new Promise<void>((resolve, reject) => {
+			this._internal.openRejector = reject;
 			const upgrade = this._onUpgrade.bind(this, key, req, resolve, reject);
-			req.once("upgrade", upgrade);
-			req.once("error", e => { // Promises can only be resolved/rejected once. _onUpgrade removes all req error events after resolve
+			onErrorRef = e => { // Promises can only be resolved/rejected once. _onUpgrade removes all req error events after resolve
+				cameFromOnError = true;
 				this._connecting = false;
 				req.removeListener("upgrade", upgrade);
 				reject(e);
-			});
+			};
+			req.once("upgrade", upgrade);
+			req.once("error", onErrorRef);
 			req.end();
+		}).catch(reason => {
+			if (onErrorRef && !cameFromOnError) {
+				req.destroy();
+				req.removeListener("error", onErrorRef);
+				onErrorRef(reason);
+			}
+			return Promise.reject(reason);
 		});
 	}
 
@@ -218,6 +232,7 @@ class BetterWs extends EventEmitter {
 	 * @param socket The raw socket from upgrading the request from connect.
 	 */
 	private _onUpgrade(key: string, req: http.ClientRequest, resolve: (value: void | PromiseLike<void>) => void, reject: (reason?: any) => void, res: http.IncomingMessage, socket: Socket): void {
+		this._internal.openRejector = null;
 		const hash = createHash("sha1").update(key + "258EAFA5-E914-47DA-95CA-C5AB0DC85B11").digest("base64");
 		const accept = res.headers["sec-websocket-accept"];
 		if (hash !== accept) {
