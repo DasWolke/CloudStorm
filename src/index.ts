@@ -1,11 +1,11 @@
-import Client = require("./Client");
+import Client2 = require("./Client");
 import Constants = require("./Constants");
 import Intents = require("./Intents");
 
-import Shard = require("./Shard");
-import ShardManager = require("./ShardManager");
+import Shard2 = require("./Shard");
+import ShardManager2 = require("./ShardManager");
 
-import BetterWs = require("./BetterWs");
+import BetterWs2 = require("./BetterWs");
 
-export { BetterWs, Client, Constants, Intents, Shard, ShardManager };
+export { BetterWs2 as BetterWs, Client2 as Client, Constants, Intents, Shard2 as Shard, ShardManager2 as ShardManager };
 export * from "./Types";

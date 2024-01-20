@@ -1,7 +1,7 @@
 "use strict";
 
 import { EventEmitter } from "events";
-import DiscordConnector = require("./DiscordConnector");
+import DC = require("./DiscordConnector");
 
 interface ShardEvents {
 	disconnect: [number, string, boolean];
@@ -34,7 +34,7 @@ class Shard extends EventEmitter {
 	/** If this shard has received the READY or RESUMED payload and isn't disconnected yet. */
 	public ready = false;
 	/** The connector that handles all of the Discord specific connection logic. */
-	public connector: DiscordConnector;
+	public connector: DC;
 
 	/**
 	 * Create a new Shard.
@@ -44,7 +44,7 @@ class Shard extends EventEmitter {
 	public constructor(public id: number, public client: EventEmitter & { options: Omit<import("./Types").IClientOptions, "snowtransferInstance"> & { token: string; endpoint?: string; } }) {
 		super();
 
-		this.connector = new DiscordConnector(id, client);
+		this.connector = new DC(id, client);
 		this.connector.on("disconnect", (...args) => {
 			this.ready = false;
 			this.emit("disconnect", ...args);

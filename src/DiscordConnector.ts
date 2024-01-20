@@ -108,8 +108,6 @@ class DiscordConnector extends EventEmitter {
 	/** A Timeout that, when triggered, sends the first heartbeat */
 	private _initialHeartbeatTimeout: NodeJS.Timeout | null = null;
 
-	public static readonly default = DiscordConnector;
-
 	/**
 	 * Creates a new Discord Connector.
 	 * @param id id of the shard that created this class.
