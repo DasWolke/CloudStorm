@@ -204,7 +204,7 @@ class DiscordConnector extends EventEmitter {
 			this.heartbeatInterval = withShardID.d.heartbeat_interval;
 			this._initialHeartbeatTimeout = setTimeout(() => this.heartbeat(), this.heartbeatInterval * Math.random());
 			this._trace = (withShardID.d as unknown as { _trace: string })._trace;
-			this.emit("queueIdentify", this.id);
+			this._onHello();
 			break;
 
 		case OP.HEARTBEAT_ACK:
@@ -271,16 +271,19 @@ class DiscordConnector extends EventEmitter {
 		this.heartbeatInterval = 0;
 	}
 
+	private _onHello(): void {
+		if (this.sessionId) return void this.resume();
+		else this.emit("queueIdentify", this.id);
+	}
+
 	/**
-	 * Send an OP 2 IDENTIFY to the gateway or an OP 6 RESUME if forceful identify is falsy.
-	 * @param force Whether CloudStorm should send an OP 2 IDENTIFY even if there's a session that could be resumed.
+	 * Send an OP 2 IDENTIFY to the gateway.
 	 */
-	public async identify(force?: boolean): Promise<void> {
+	public async identify(): Promise<void> {
 		if (this.betterWs.status !== 1) {
 			this.client.emit("error", `Shard ${this.id} was attempting to identify when the ws was not open. Was ${wsStatusTypes[this.betterWs.status]}`);
 			return this._reconnect(true);
 		}
-		if (this.sessionId && !force) return this.resume();
 		this.client.emit("debug", `Shard ${this.id} is identifying`);
 
 		this.status = "identifying";
@@ -301,7 +304,7 @@ class DiscordConnector extends EventEmitter {
 			}
 		} as GatewayIdentify;
 
-		if (this.options.initialPresence) Object.assign(data.d, { presence: this._checkPresenceData(this.options.initialPresence) });
+		if (this.options.initialPresence) data.d.presence = this._checkPresenceData(this.options.initialPresence);
 		return this.betterWs.sendMessage(data);
 	}
 
@@ -314,8 +317,10 @@ class DiscordConnector extends EventEmitter {
 			return this._reconnect(true);
 		}
 		this.client.emit("debug", `Shard ${this.id} is resuming`);
+
 		this.status = "resuming";
 		this.emit("stateChange", "resuming");
+
 		return this.betterWs.sendMessage({
 			op: OP.RESUME,
 			d: { seq: this.seq, token: this.options.token, session_id: this.sessionId! }
