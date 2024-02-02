@@ -1,6 +1,6 @@
 {
   "name": "cloudstorm",
-  "version": "0.10.5",
+  "version": "0.10.6",
   "description": "Minimalistic Discord Gateway library",
   "main": "./dist/index.js",
   "engines": {

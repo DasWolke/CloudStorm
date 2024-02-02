@@ -14,14 +14,13 @@ import { GATEWAY_OP_CODES } from "./Constants";
 
 import { LocalBucket } from "snowtransfer";
 
-import type { GatewayReceivePayload, GatewaySendPayload } from "discord-api-types/v10";
 import type { Socket } from "net";
 
 interface BWSEvents {
 	ws_open: [];
 	ws_close: [number, string];
-	ws_receive: [GatewayReceivePayload];
-	ws_send: [GatewaySendPayload];
+	ws_receive: [any];
+	ws_send: [any];
 	debug: [string];
 }
 
@@ -117,6 +116,7 @@ class BetterWs extends EventEmitter {
 				"Upgrade": "websocket",
 				"Sec-WebSocket-Key": key,
 				"Sec-WebSocket-Version": "13",
+				...this.options.headers
 			}
 		});
 		let onErrorRef: ((e: Error) => void) | undefined;
@@ -173,13 +173,11 @@ class BetterWs extends EventEmitter {
 	 * @param data What to send to the server.
 	 * @returns A Promise that resolves when the message passes the bucket queue(s) and is written to the socket's Buffer to send.
 	 */
-	public sendMessage(data: GatewaySendPayload): Promise<void> {
-		if (!isValidRequest(data)) return Promise.reject(new Error("Invalid request"));
-
+	public sendMessage(data: any): Promise<void> {
 		return new Promise(res => {
-			const presence = data.op === GATEWAY_OP_CODES.PRESENCE_UPDATE;
+			const presence = data?.op === GATEWAY_OP_CODES.PRESENCE_UPDATE;
 			const sendMsg = () => {
-				this.wsBucket.queue(() => {
+				const fn = () => {
 					this.emit("ws_send", data);
 					if (this.encoding === "json") this._write(Buffer.from(JSON.stringify(data)), 1);
 					else {
@@ -187,9 +185,11 @@ class BetterWs extends EventEmitter {
 						this._write(etf, 2);
 					}
 					res(void 0);
-				});
+				};
+				if (this.options.bypassBuckets) fn();
+				else this.wsBucket.queue(fn);
 			};
-			if (presence) this.presenceBucket.queue(sendMsg);
+			if (presence && !this.options.bypassBuckets) this.presenceBucket.queue(sendMsg);
 			else sendMsg();
 		});
 	}
@@ -385,10 +385,6 @@ class BetterWs extends EventEmitter {
 		}
 		}
 	}
-}
-
-function isValidRequest(value: GatewaySendPayload): boolean {
-	return value && typeof value === "object" && Number.isInteger(value.op) && typeof value.d !== "undefined";
 }
 
 function readRange(socket: import("net").Socket, index: number, bytes: number): number {

@@ -31,4 +31,6 @@ export interface IClientOptions {
 export interface IClientWSOptions {
 	compress?: boolean;
 	encoding?: "etf" | "json";
+	headers?: Record<string, any>;
+	bypassBuckets?: boolean
 }
