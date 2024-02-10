@@ -41,7 +41,7 @@ interface DiscordConnector {
 }
 
 const resumableCodes = [4008, 4005, 4003, 4002, 4001, 4000, 1006, 1001];
-const shouldntAttemptReconnectCodes = [4014, 4013, 4012, 4011, 4010, 4004, 1000];
+const shouldntAttemptReconnectCodes = [4014, 4013, 4012, 4011, 4010, 4004];
 const disconnectMessages = {
 	4014: "Disallowed Intents, check your client options and application page.",
 	4013: "Invalid Intents data, check your client options.",
@@ -183,7 +183,7 @@ class DiscordConnector extends EventEmitter {
 
 		case OP.RECONNECT:
 			this.client.emit("debug", `Gateway asked shard ${this.id} to reconnect`);
-			if (this.options.reconnect) this._reconnect(true);
+			if (this.reconnect) this._reconnect(true);
 			else this.disconnect();
 			break;
 
@@ -254,7 +254,7 @@ class DiscordConnector extends EventEmitter {
 		this.heartbeatTimeout = setInterval(() => {
 			if (this.lastACKAt <= Date.now() - (this.heartbeatInterval + 5000)) {
 				this.client.emit("debug", `Shard ${this.id} has not received a heartbeat ACK in ${this.heartbeatInterval + 5000}ms.`);
-				if (this.options.reconnect) this._reconnect(true);
+				if (this.reconnect) this._reconnect(true);
 				else this.disconnect();
 			} else this.heartbeat();
 		}, this.heartbeatInterval);
@@ -387,22 +387,24 @@ class DiscordConnector extends EventEmitter {
 		this.emit("stateChange", "disconnected");
 		this.clearHeartBeat();
 
+		const isManualClose = code === 1000 && this._closing;
+
 		const message = disconnectMessages[code as keyof typeof disconnectMessages];
 		const isRecoverable = resumableCodes.includes(code);
-		const shouldntReconnect = shouldntAttemptReconnectCodes.includes(code);
+		const shouldntReconnect = shouldntAttemptReconnectCodes.includes(code) || isManualClose;
 
 		if (isRecoverable && this.resumeAddress) this.betterWs.address = this.resumeAddress;
 		else this.betterWs.address = this.identifyAddress;
 
 		if (message) this.client.emit("error", message);
 
-		if ((code === 1000 && this._closing) || this.reconnecting) gracefulClose = true;
-
-		if (!shouldntReconnect && this.reconnect) this.connect();
+		if (isManualClose || this.reconnecting) gracefulClose = true;
 
 		this._closing = false;
 
 		this.emit("disconnect", code, reason, gracefulClose);
+
+		if (!shouldntReconnect && this.reconnect) this.connect();
 	}
 
 	/**

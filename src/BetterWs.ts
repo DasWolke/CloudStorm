@@ -45,7 +45,7 @@ interface BetterWs {
  */
 class BetterWs extends EventEmitter {
 	/** The encoding to send/receive messages to/from the server with. */
-	public encoding: "etf" | "json";
+	public encoding: "etf" | "json" | "other";
 	/** If the messages sent/received are compressed with zlib. */
 	public compress: boolean;
 	/** The ratelimit bucket for how many packets this ws can send within a time frame. */
@@ -79,10 +79,10 @@ class BetterWs extends EventEmitter {
 	 * @param address The http(s):// or ws(s):// URL cooresponding to the server to connect to.
 	 * @param options Options specific to this WebSocket.
 	 */
-	public constructor(public address: string, public options: import("./Types").IClientWSOptions) {
+	public constructor(public address: string, public options: Omit<import("./Types").IClientWSOptions, "encoding"> & { encoding?: import("./Types").IClientWSOptions["encoding"] | "other" }) {
 		super();
 
-		this.encoding = options.encoding ?? "json";
+		this.encoding = options.encoding ?? "other";
 		this.compress = options.compress ?? false;
 	}
 
@@ -180,10 +180,8 @@ class BetterWs extends EventEmitter {
 				const fn = () => {
 					this.emit("ws_send", data);
 					if (this.encoding === "json") this._write(Buffer.from(JSON.stringify(data)), 1);
-					else {
-						const etf = writeETF(data);
-						this._write(etf, 2);
-					}
+					else if (this.encoding === "etf") this._write(writeETF(data), 2);
+					else if (this.encoding === "other") this._write(Buffer.from(data), 2);
 					res(void 0);
 				};
 				if (this.options.bypassBuckets) fn();
@@ -325,7 +323,9 @@ class BetterWs extends EventEmitter {
 		const internal = this._internal;
 		switch (opcode) {
 		case 1: {
-			const packet = JSON.parse(message.toString());
+			let packet: any;
+			if (this.encoding === "json") packet = JSON.parse(message.toString());
+			else if (this.encoding === "other") packet = message;
 			this.emit("ws_receive", packet);
 			break;
 		}
@@ -365,11 +365,12 @@ class BetterWs extends EventEmitter {
 					this.emit("debug", "Data from zlib processing was null. If you see this error let me know"); // This should never run, but TS is lame
 					return;
 				}
-				packet = this.encoding === "json" ? JSON.parse(String(data)) : readETF(data, 1);
-			} else if (this.encoding === "json") {
-				const data = inflateSync(message);
-				packet = JSON.parse(data.toString());
-			} else packet = readETF(message, 1);
+				if (this.encoding === "json") packet = JSON.parse(String(data));
+				else if (this.encoding === "etf") packet = readETF(data, 1);
+				else if (this.encoding === "other") packet = data;
+			} else if (this.encoding === "json") packet = JSON.parse(inflateSync(message).toString());
+			else if (this.encoding === "etf") packet = readETF(message, 1);
+			else if (this.encoding === "other") packet = message;
 			this.emit("ws_receive", packet);
 			break;
 		}

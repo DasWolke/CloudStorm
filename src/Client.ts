@@ -7,7 +7,8 @@ import { SnowTransfer, LocalBucket } from "snowtransfer";
 import ShardManager = require("./ShardManager");
 import type {
 	GatewaySendPayload,
-	GatewayReceivePayload
+	GatewayReceivePayload,
+	APIGatewayBotInfo
 } from "discord-api-types/v10";
 
 interface ClientEvents {
@@ -133,7 +134,7 @@ class Client extends EventEmitter {
 	 * Get the GatewayData including recommended amount of shards and other helpful info.
 	 * @returns Object with url and shards to use to connect to discord.
 	 */
-	public async getGatewayBot() {
+	public async getGatewayBot(): Promise<APIGatewayBotInfo> {
 		return this._restClient.bot.getGatewayBot();
 	}
 
