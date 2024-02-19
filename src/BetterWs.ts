@@ -389,20 +389,25 @@ class BetterWs extends EventEmitter {
 }
 
 function readRange(socket: import("net").Socket, index: number, bytes: number): number {
-	// @ts-ignore
-	let head = socket._readableState.buffer.head;
 	let cursor = 0;
 	let read = 0;
 	let num = 0;
+
+	// @ts-ignore
+	const readable = socket._readableState;
+	let currentBufferIndex = readable.bufferIndex;
+	let currentBuffer = readable.buffer.head ?? readable.buffer[currentBufferIndex];
+
 	do {
-		for (const element of head.data) {
+		const data = currentBuffer.data ?? currentBuffer;
+		for (const element of data) {
 			if (++cursor > index) {
 				num *= 256;
 				num += element;
 				if (++read === bytes) return num;
 			}
 		}
-	} while((head = head.next));
+	} while((currentBuffer = (currentBuffer.next ?? readable.buffer[++currentBufferIndex])));
 	throw new Error("readRange failed?");
 }
 
