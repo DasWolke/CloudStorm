@@ -1,6 +1,9 @@
 "use strict";
 
-const version = require("../package.json").version as string;
+import fs = require("fs");
+import path = require("path");
+
+const version = JSON.parse(fs.readFileSync(path.join(__dirname, "../package.json"), { encoding: "utf8" })).version as string;
 import { EventEmitter } from "events";
 import Constants = require("./Constants");
 import { SnowTransfer, LocalBucket } from "snowtransfer";
