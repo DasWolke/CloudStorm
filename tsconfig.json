@@ -12,7 +12,7 @@
 		"outDir": "./dist",
 		"pretty": true,
 		"removeComments": false,
-		"resolveJsonModule": true,
+		"resolveJsonModule": false,
 		"sourceMap": true,
 		"strictFunctionTypes": true,
 		"strictBindCallApply": true,
@@ -21,5 +21,5 @@
 		"types": ["node"],
 		"skipLibCheck": true
 	},
-	"include": ["./src"],
+	"include": ["./src"]
 }
