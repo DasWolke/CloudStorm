@@ -15,7 +15,7 @@
   "license": "MIT",
   "dependencies": {
     "discord-api-types": "^0.37.70",
-    "snowtransfer": "^0.10.4"
+    "snowtransfer": "^0.10.5"
   },
   "devDependencies": {
     "@types/node": "20.11.19",
