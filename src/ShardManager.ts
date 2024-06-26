@@ -119,7 +119,7 @@ class ShardManager {
 			const shard = this.shards[shardId];
 			if (!shard) rej(new Error(`Shard ${shardId} does not exist`));
 			if (!shard.ready) return;
-			shard.presenceUpdate(data).then(result => res(result)).catch(e => rej(e));
+			shard.presenceUpdate(data).then(result => res(result)).catch(e => rej(e as Error));
 		});
 	}
 
@@ -133,7 +133,7 @@ class ShardManager {
 			const shard = this.shards[shardId];
 			if (!shard) rej(new Error(`Shard ${shardId} does not exist`));
 			if (!shard.ready) return;
-			shard.voiceStateUpdate(data).then(result => res(result)).catch(e => rej(e));
+			shard.voiceStateUpdate(data).then(result => res(result)).catch(e => rej(e as Error));
 		});
 	}
 
@@ -147,7 +147,7 @@ class ShardManager {
 			const shard = this.shards[shardId];
 			if (!shard) rej(new Error(`Shard ${shardId} does not exist`));
 			if (!shard.ready) return;
-			shard.requestGuildMembers(data).then(result => res(result)).catch(e => rej(e));
+			shard.requestGuildMembers(data).then(result => res(result)).catch(e => rej(e as Error));
 		});
 	}
 }

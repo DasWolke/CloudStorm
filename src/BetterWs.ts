@@ -140,7 +140,7 @@ class BetterWs extends EventEmitter {
 				req.removeListener("error", onErrorRef);
 				onErrorRef(reason);
 			}
-			return Promise.reject(reason);
+			return Promise.reject(reason as Error);
 		});
 	}
 
@@ -417,6 +417,12 @@ function readETF(data: Buffer, start: number): Record<any, any> | null | undefin
 	const loop = () => {
 		const type = data[x++];
 		switch(type) {
+		case 70: {
+			// @ts-ignore
+			const float = data.getFloat64(x);
+			x += 8;
+			return float;
+		}
 		case 97: {
 			return data[x++];
 		}

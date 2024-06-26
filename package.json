@@ -1,6 +1,6 @@
 {
   "name": "cloudstorm",
-  "version": "0.10.8",
+  "version": "0.10.9",
   "description": "Minimalistic Discord Gateway library",
   "main": "./dist/index.js",
   "engines": {
@@ -14,18 +14,18 @@
   "author": "wolke <wolke@weeb.sh>",
   "license": "MIT",
   "dependencies": {
-    "discord-api-types": "^0.37.70",
+    "discord-api-types": "^0.37.90",
     "snowtransfer": "^0.10.5"
   },
   "devDependencies": {
-    "@types/node": "20.11.19",
-    "@typescript-eslint/eslint-plugin": "^7.0.2",
-    "@typescript-eslint/parser": "^7.0.2",
+    "@types/node": "20.14.9",
+    "@typescript-eslint/eslint-plugin": "^7.14.1",
+    "@typescript-eslint/parser": "^7.14.1",
     "eslint": "^8.56.0",
-    "tsup": "^8.0.2",
-    "typedoc": "^0.25.8",
-    "typedoc-plugin-mdn-links": "^3.1.16",
-    "typescript": "^5.3.3"
+    "tsup": "^8.1.0",
+    "typedoc": "^0.26.2",
+    "typedoc-plugin-mdn-links": "^3.2.1",
+    "typescript": "^5.5.2"
   },
   "files": [
     "dist",
