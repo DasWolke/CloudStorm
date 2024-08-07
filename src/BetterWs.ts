@@ -418,8 +418,7 @@ function readETF(data: Buffer, start: number): Record<any, any> | null | undefin
 		const type = data[x++];
 		switch(type) {
 		case 70: {
-			// @ts-ignore
-			const float = data.getFloat64(x);
+			const float = data.readDoubleBE(x);
 			x += 8;
 			return float;
 		}
