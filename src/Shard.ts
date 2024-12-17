@@ -29,6 +29,7 @@ interface Shard {
  * Shard class, which provides a wrapper around the DiscordConnector with metadata like the id of the shard.
  *
  * This class is automatically instantiated by the library and is documented for reference.
+ * @since 0.1.4
  */
 class Shard extends EventEmitter {
 	/** If this shard has received the READY or RESUMED payload and isn't disconnected yet. */
@@ -62,6 +63,7 @@ class Shard extends EventEmitter {
 
 	/**
 	 * Create a new connection to Discord.
+	 * @since 0.1.4
 	 */
 	public connect(): void {
 		this.connector.connect();
@@ -69,6 +71,7 @@ class Shard extends EventEmitter {
 
 	/**
 	 * Close the current connection to Discord.
+	 * @since 0.1.4
 	 */
 	public disconnect(): Promise<void> {
 		return this.connector.disconnect();
@@ -76,6 +79,7 @@ class Shard extends EventEmitter {
 
 	/**
 	 * Send an OP 3 PRESENCE_UPDATE to Discord.
+	 * @since 0.3.0
 	 * @param data Data to send.
 	 */
 	public presenceUpdate(data: Parameters<Shard["connector"]["presenceUpdate"]>["0"]): Promise<void> {
@@ -84,6 +88,7 @@ class Shard extends EventEmitter {
 
 	/**
 	 * Send an OP 4 VOICE_STATE_UPDATE to Discord.
+	 * @since 0.1.4
 	 * @param data Data to send
 	 */
 	public voiceStateUpdate(data: Parameters<Shard["connector"]["voiceStateUpdate"]>["0"]): Promise<void> {
@@ -92,6 +97,7 @@ class Shard extends EventEmitter {
 
 	/**
 	 * Send an OP 8 REQUEST_GUILD_MEMBERS to Discord.
+	 * @since 0.1.4
 	 * @param data Data to send.
 	 */
 	public requestGuildMembers(data: Parameters<Shard["connector"]["requestGuildMembers"]>["0"]): Promise<void> {

@@ -66,6 +66,7 @@ const wsStatusTypes = ["Whatever 0 is. Report if you see this", "connected", "co
  * Class used for acting based on received events.
  *
  * This class is automatically instantiated by the library and is documented for reference.
+ * @since 0.1.4
  */
 class DiscordConnector extends EventEmitter {
 	/** The options used by the client */
@@ -139,6 +140,7 @@ class DiscordConnector extends EventEmitter {
 
 	/**
 	 * Connect to Discord.
+	 * @since 0.1.4
 	 */
 	public async connect(): Promise<void> {
 		this._closing = false;
@@ -156,6 +158,7 @@ class DiscordConnector extends EventEmitter {
 
 	/**
 	 * Close the websocket connection and disconnect.
+	 * @since 0.1.4
 	 */
 	public async disconnect(): Promise<void> {
 		this._closing = true;
@@ -165,6 +168,7 @@ class DiscordConnector extends EventEmitter {
 
 	/**
 	 * Called with a parsed Websocket message to execute further actions.
+	 * @since 0.1.4
 	 * @param message Message that was received.
 	 */
 	private async messageAction(message: GatewayReceivePayload): Promise<void> {
@@ -219,6 +223,7 @@ class DiscordConnector extends EventEmitter {
 
 	/**
 	 * Reset this connector to be ready to resume or hard reconnect, then connect.
+	 * @since 0.3.0
 	 * @param resume Whether or not the client intends to send an OP 6 RESUME later.
 	 */
 	private async _reconnect(resume = false): Promise<void> {
@@ -238,6 +243,7 @@ class DiscordConnector extends EventEmitter {
 
 	/**
 	 * Hard reset this connector.
+	 * @since 0.1.4
 	 */
 	private reset(): void {
 		this.sessionId = null;
@@ -249,6 +255,7 @@ class DiscordConnector extends EventEmitter {
 
 	/**
 	 * Sets the this.heartbeatTimeout Interval.
+	 * @since 0.8.5
 	 */
 	private setHeartBeat(): void {
 		this.heartbeatTimeout = setInterval(() => {
@@ -262,6 +269,7 @@ class DiscordConnector extends EventEmitter {
 
 	/**
 	 * Clear the heart beat interval, set it to null and set the cached heartbeat_interval as 0.
+	 * @since 0.3.0
 	 */
 	private clearHeartBeat(): void {
 		if (this.heartbeatTimeout) clearInterval(this.heartbeatTimeout);
@@ -271,6 +279,9 @@ class DiscordConnector extends EventEmitter {
 		this.heartbeatInterval = 0;
 	}
 
+	/**
+	 * @since 0.10.0
+	 */
 	private _onHello(): void {
 		if (this.sessionId) return void this.resume();
 		else this.emit("queueIdentify", this.id);
@@ -278,6 +289,7 @@ class DiscordConnector extends EventEmitter {
 
 	/**
 	 * Send an OP 2 IDENTIFY to the gateway.
+	 * @since 0.1.4
 	 */
 	public async identify(): Promise<void> {
 		if (this.betterWs.status !== 1) {
@@ -310,6 +322,7 @@ class DiscordConnector extends EventEmitter {
 
 	/**
 	 * Send an OP 6 RESUME to the gateway.
+	 * @since 0.1.4
 	 */
 	public async resume(): Promise<void> {
 		if (this.betterWs.status !== 1) {
@@ -329,6 +342,7 @@ class DiscordConnector extends EventEmitter {
 
 	/**
 	 * Send an OP 1 HEARTBEAT to the gateway.
+	 * @since 0.1.4
 	 */
 	private heartbeat(): void {
 		if (this.betterWs.status !== 1) {
@@ -346,6 +360,7 @@ class DiscordConnector extends EventEmitter {
 
 	/**
 	 * Handle dispatch events.
+	 * @since 0.1.4
 	 * @param message Message received from the websocket.
 	 */
 	private handleDispatch(message: import("./Types").IGatewayDispatch): void {
@@ -378,6 +393,7 @@ class DiscordConnector extends EventEmitter {
 
 	/**
 	 * Handle a close from the underlying websocket.
+	 * @since 0.1.4
 	 * @param code Websocket close code.
 	 * @param reason Close reason if any.
 	 */
@@ -409,6 +425,7 @@ class DiscordConnector extends EventEmitter {
 
 	/**
 	 * Send an OP 3 PRESENCE_UPDATE to the gateway.
+	 * @since 0.3.0
 	 * @param data Presence data to send.
 	 */
 	public async presenceUpdate(data: Partial<GatewayPresenceUpdateData>): Promise<void> {
@@ -417,6 +434,7 @@ class DiscordConnector extends EventEmitter {
 
 	/**
 	 * Send an OP 4 VOICE_STATE_UPDATE to the gateway.
+	 * @since 0.1.4
 	 * @param data Voice state update data to send.
 	 */
 	public async voiceStateUpdate(data: GatewayVoiceStateUpdateData & { self_deaf?: boolean; self_mute?: boolean; }): Promise<void> {
@@ -426,6 +444,7 @@ class DiscordConnector extends EventEmitter {
 
 	/**
 	 * Send an OP 8 REQUEST_GUILD_MEMBERS to the gateway.
+	 * @since 0.1.4
 	 * @param data Data to send.
 	 */
 	public async requestGuildMembers(data: GatewayRequestGuildMembersData & { limit?: number; }): Promise<void> {
@@ -434,6 +453,7 @@ class DiscordConnector extends EventEmitter {
 
 	/**
 	 * Checks presence data and fills in missing elements.
+	 * @since 0.1.4
 	 * @param data Data to send.
 	 * @returns Data after it's fixed/checked.
 	 */
@@ -459,6 +479,7 @@ class DiscordConnector extends EventEmitter {
 
 	/**
 	 * Checks voice state update data and fills in missing elements.
+	 * @since 0.1.4
 	 * @param data Data to send.
 	 * @returns Data after it's fixed/checked.
 	 */
@@ -471,6 +492,7 @@ class DiscordConnector extends EventEmitter {
 
 	/**
 	 * Checks request guild members data and fills in missing elements.
+	 * @since 0.1.4
 	 * @param data Data to send.
 	 * @returns Data after it's fixed/checked.
 	 */

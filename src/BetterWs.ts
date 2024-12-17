@@ -42,6 +42,7 @@ interface BetterWs {
 
 /**
  * Helper Class for simplifying the websocket connection to Discord.
+ * @since 0.1.4
  */
 class BetterWs extends EventEmitter {
 	/** The encoding to send/receive messages to/from the server with. */
@@ -99,6 +100,7 @@ class BetterWs extends EventEmitter {
 
 	/**
 	 * Initiates a WebSocket connection to the server.
+	 * @since 0.4.1
 	 */
 	public connect(): Promise<void> {
 		if (this._socket || this._connecting) return Promise.resolve(void 0);
@@ -146,6 +148,7 @@ class BetterWs extends EventEmitter {
 
 	/**
 	 * Disconnects from the server.
+	 * @since 0.1.4
 	 * @param code The close code.
 	 * @param reason The reason for closing if any.
 	 * @returns A Promise that resolves when the connection is fully closed.
@@ -170,6 +173,7 @@ class BetterWs extends EventEmitter {
 
 	/**
 	 * Sends a message to the server in the format of { op: number, d: any } (before any encoding/compression).
+	 * @since 0.1.4
 	 * @param data What to send to the server.
 	 * @returns A Promise that resolves when the message passes the bucket queue(s) and is written to the socket's Buffer to send.
 	 */
@@ -194,6 +198,7 @@ class BetterWs extends EventEmitter {
 
 	/**
 	 * Method to raw write messages to the server.
+	 * @since 0.4.1
 	 * @param packet Buffer containing the message to send.
 	 * @param opcode WebSocket spec op code.
 	 */
@@ -260,6 +265,7 @@ class BetterWs extends EventEmitter {
 
 	/**
 	 * Handler for when the raw socket to the server encounters an error.
+	 * @since 0.4.1
 	 * @param error What happened.
 	 */
 	private _onError(error: Error): void {
@@ -270,6 +276,7 @@ class BetterWs extends EventEmitter {
 
 	/**
 	 * Handler for when the raw socket is fully closed and cleans up this WebSocket.
+	 * @since 0.4.1
 	 */
 	private _onClose(): void {
 		const socket = this._socket;
@@ -293,6 +300,7 @@ class BetterWs extends EventEmitter {
 
 	/**
 	 * Handler for when there is data in the socket's Buffer to read.
+	 * @since 0.4.1
 	 */
 	private _onReadable(): void {
 		const socket = this._socket;
@@ -316,6 +324,7 @@ class BetterWs extends EventEmitter {
 
 	/**
 	 * Transforms/reads raw messages from the server and emits the appropriate event.
+	 * @since 0.4.1
 	 * @param opcode WebSocket spec op code.
 	 * @param message Buffer of data to transform/read.
 	 */

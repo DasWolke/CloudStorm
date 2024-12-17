@@ -45,6 +45,7 @@ interface Client {
 
 /**
  * Main class used for receiving events and interacting with the Discord gateway.
+ * @since 0.1.4
  */
 class Client extends EventEmitter {
 	/** The Discord auth token to connect with. */
@@ -56,7 +57,7 @@ class Client extends EventEmitter {
 	/** The version string of CloudStorm. */
 	public version = version;
 	/** The SnowTransfer instance to use to make some requests to get connect info. */
-	private _restClient: SnowTransfer;
+	private readonly _restClient: SnowTransfer;
 
 	/**
 	 * Create a new Client to connect to the Discord gateway.
@@ -87,6 +88,7 @@ class Client extends EventEmitter {
 
 	/**
 	 * Create one or more connections (depending on the selected amount of shards) to the Discord gateway.
+	 * @since 0.1.4
 	 * @returns This function returns a promise which is solely used for awaiting the getGateway() method's return value.
 	 */
 	public async connect(): Promise<void> {
@@ -99,6 +101,7 @@ class Client extends EventEmitter {
 	 * Method to grab initial connection info from Discord.
 	 * Should only be called automatically by the lib unless you are a large bot with a max_concurrency not equal to 1.
 	 * If you are a large bot, you should call this method at a rate of your own discretion to update your max_concurrency cached value to have up to date bucket info.
+	 * @since 0.5.0
 	 * @returns The amount of shards the bot should spawn if set to auto.
 	 */
 	public async fetchConnectInfo(): Promise<number> {
@@ -126,6 +129,7 @@ class Client extends EventEmitter {
 
 	/**
 	 * Get the gateway endpoint to connect to.
+	 * @since 0.1.4
 	 * @returns String url with the Gateway Endpoint to connect to.
 	 */
 	public async getGateway(): Promise<string> {
@@ -135,6 +139,7 @@ class Client extends EventEmitter {
 
 	/**
 	 * Get the GatewayData including recommended amount of shards and other helpful info.
+	 * @since 0.1.4
 	 * @returns Object with url and shards to use to connect to discord.
 	 */
 	public async getGatewayBot(): Promise<APIGatewayBotInfo> {
@@ -144,6 +149,7 @@ class Client extends EventEmitter {
 	/**
 	 * Disconnect the bot gracefully,
 	 * you will receive a 'disconnected' event once the ShardManager successfully closes all shard websocket connections.
+	 * @since 0.1.4
 	 */
 	public disconnect(): void {
 		return this.shardManager.disconnect();
@@ -151,6 +157,7 @@ class Client extends EventEmitter {
 
 	/**
 	 * Send an OP 3 PRESENCE_UPDATE to Discord, which updates the status of all shards facilitated by this client's ShardManager.
+	 * @since 0.3.0
 	 * @returns Promise that's resolved once all shards have sent the websocket payload.
 	 *
 	 * @example
@@ -170,6 +177,7 @@ class Client extends EventEmitter {
 
 	/**
 	 * Send an OP 3 PRESENCE_UPDATE to Discord, which updates the status of a single shard facilitated by this client's ShardManager.
+	 * @since 0.11.0
 	 * @param shardId id of the shard that should update it's status.
 	 * @param data Presence data to send.
 	 * @returns Promise that's resolved once the shard has sent the websocket payload.
@@ -185,13 +193,14 @@ class Client extends EventEmitter {
 	 * 	client.shardPresenceUpdate(0, { status: "dnd", activities: [{ name: "Im shard 0", type: 0 }] });
 	 * });
 	 */
-	public shardStatusUpdate(shardId: number, data: Parameters<Client["shardManager"]["shardPresenceUpdate"]>["1"]): Promise<void> {
+	public shardPresenceUpdate(shardId: number, data: Parameters<Client["shardManager"]["shardPresenceUpdate"]>["1"]): Promise<void> {
 		return this.shardManager.shardPresenceUpdate(shardId, data);
 	}
 
 	/**
 	 * Send an OP 4 VOICE_STATE_UPDATE to Discord. this does **not** allow you to send audio with CloudStorm itself,
 	 * it just provides the necessary data for another application to send audio data to Discord.
+	 * @since 0.1.4
 	 * @param shardId id of the shard that should send the payload.
 	 * @param data Voice state update data to send.
 	 * @returns Promise that's resolved once the payload was sent to Discord.
@@ -214,6 +223,7 @@ class Client extends EventEmitter {
 
 	/**
 	 * Send an OP 8 REQUEST_GUILD_MEMBERS to Discord.
+	 * @since 0.1.4
 	 * @param shardId id of the shard that should send the payload.
 	 * @param data Request guild members data to send.
 	 * @returns Promise that's resolved once the payload was send to Discord.
@@ -237,6 +247,7 @@ class Client extends EventEmitter {
 
 	/**
 	 * Update the endpoint shard websockets will connect to.
+	 * @since 0.1.4
 	 * @param gatewayUrl Base gateway wss url to update the cached endpoint to.
 	 */
 	private _updateEndpoint(gatewayUrl: string): void {

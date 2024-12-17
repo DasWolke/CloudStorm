@@ -7,6 +7,7 @@ import { LocalBucket } from "snowtransfer";
  * Class used for managing shards for the user.
  *
  * This class is automatically instantiated by the library and is documented for reference.
+ * @since 0.1.4
  */
 class ShardManager {
 	/** The options used by the client */
@@ -27,6 +28,7 @@ class ShardManager {
 
 	/**
 	 * Create shard instances and add them to the connection queue.
+	 * @since 0.1.4
 	 */
 	public spawn(): void {
 		if (!this.concurrencyBucket) throw new Error("Trying to spawn shards without calling Client.connect()");
@@ -40,6 +42,7 @@ class ShardManager {
 
 	/**
 	 * Disconnect all shards facilitated by this manager.
+	 * @since 0.1.4
 	 */
 	public disconnect(): void {
 		for (const shardKey in this.shards) {
@@ -49,6 +52,7 @@ class ShardManager {
 
 	/**
 	 * Add event listeners to a shard to that the manager can act on received events.
+	 * @since 0.1.4
 	 * @param shard Shard to add the event listeners to.
 	 */
 	private _addListener(shard: Shard): void {
@@ -74,6 +78,7 @@ class ShardManager {
 
 	/**
 	 * Checks if all shards spawned by this manager are ready.
+	 * @since 0.1.4
 	 */
 	private _checkReady(): void {
 		for (const shardId in this.shards) {
@@ -86,6 +91,7 @@ class ShardManager {
 
 	/**
 	 * Checks if all shards spawned by this manager are disconnected.
+	 * @since 0.1.4
 	 */
 	private _checkDisconnect(): void {
 		for (const shardId in this.shards) {
@@ -98,6 +104,7 @@ class ShardManager {
 
 	/**
 	 * Update the status of all currently connected shards which have been spawned by this manager.
+	 * @since 0.3.0
 	 * @param data Data to send.
 	 */
 	public async presenceUpdate(data: Parameters<Shard["presenceUpdate"]>["0"]): Promise<void> {
@@ -111,6 +118,7 @@ class ShardManager {
 
 	/**
 	 * Update the status of a single connected shard which has been spawned by this manager.
+	 * @since 0.3.0
 	 * @param shardId id of the shard.
 	 * @param data Data to send.
 	 */
@@ -125,6 +133,7 @@ class ShardManager {
 
 	/**
 	 * Send an OP 4 VOICE_STATE_UPDATE with a certain shard.
+	 * @since 0.1.4
 	 * @param shardId id of the shard.
 	 * @param data Data to send.
 	 */
@@ -139,6 +148,7 @@ class ShardManager {
 
 	/**
 	 * Send an OP 8 REQUEST_GUILD_MEMBERS with a certain shard.
+	 * @since 0.1.4
 	 * @param shardId id of the shard.
 	 * @param data Data to send.
 	 */
