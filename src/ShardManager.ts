@@ -66,8 +66,8 @@ class ShardManager {
 			if (!this.shards[shardId]) return this.client.emit("debug", `Received a queueIdentify event for shard ${shardId} but it does not exist. Was it removed?`);
 			this.client.emit("debug", `Shard ${shardId} is ready to identify`);
 			if (shard.connector.reconnecting) return shard.connector.resume();
-			this.concurrencyBucket?.queue(() => {
-				this.identifyBucket.queue(() => this.shards[shardId].connector.identify());
+			this.concurrencyBucket?.enqueue(() => {
+				this.identifyBucket.enqueue(() => this.shards[shardId].connector.identify());
 			});
 		});
 		shard.on("disconnect", (code, reason, gracefulClose) => {

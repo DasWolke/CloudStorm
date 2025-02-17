@@ -189,9 +189,9 @@ class BetterWs extends EventEmitter {
 					res(void 0);
 				};
 				if (this.options.bypassBuckets) fn();
-				else this.wsBucket.queue(fn);
+				else this.wsBucket.enqueue(fn);
 			};
-			if (presence && !this.options.bypassBuckets) this.presenceBucket.queue(sendMsg);
+			if (presence && !this.options.bypassBuckets) this.presenceBucket.enqueue(sendMsg);
 			else sendMsg();
 		});
 	}
