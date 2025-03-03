@@ -8,50 +8,22 @@ import { EventEmitter } from "events";
 import Constants = require("./Constants");
 import { SnowTransfer, LocalBucket } from "snowtransfer";
 import ShardManager = require("./ShardManager");
+import type { APIGatewayBotInfo } from "discord-api-types/v10";
+
 import type {
-	GatewaySendPayload,
-	GatewayReceivePayload,
-	APIGatewayBotInfo
-} from "discord-api-types/v10";
-
-interface ClientEvents {
-	debug: [string];
-	rawSend: [GatewaySendPayload];
-	rawReceive: [GatewayReceivePayload];
-	error: [string]; // no processing messages
-
-	event: [import("./Types").IGatewayMessage];
-	dispatch: [import("./Types").IGatewayDispatch];
-	shardReady: [{ id: number; ready: boolean; }];
-	ready: [];
-	disconnected: [];
-}
-
-interface Client {
-	addListener<E extends keyof ClientEvents>(event: E, listener: (...args: ClientEvents[E]) => any): this;
-	emit<E extends keyof ClientEvents>(event: E, ...args: ClientEvents[E]): boolean;
-	eventNames(): Array<keyof ClientEvents>;
-	listenerCount(event: keyof ClientEvents): number;
-	listeners(event: keyof ClientEvents): Array<(...args: Array<any>) => any>;
-	off<E extends keyof ClientEvents>(event: E, listener: (...args: ClientEvents[E]) => any): this;
-	on<E extends keyof ClientEvents>(event: E, listener: (...args: ClientEvents[E]) => any): this;
-	once<E extends keyof ClientEvents>(event: E, listener: (...args: ClientEvents[E]) => any): this;
-	prependListener<E extends keyof ClientEvents>(event: E, listener: (...args: ClientEvents[E]) => any): this;
-	prependOnceListener<E extends keyof ClientEvents>(event: E, listener: (...args: ClientEvents[E]) => any): this;
-	rawListeners(event: keyof ClientEvents): Array<(...args: Array<any>) => any>;
-	removeAllListeners(event?: keyof ClientEvents): this;
-	removeListener<E extends keyof ClientEvents>(event: E, listener: (...args: ClientEvents[E]) => any): this;
-}
+	ClientEvents,
+	IClientOptions
+} from "./Types";
 
 /**
  * Main class used for receiving events and interacting with the Discord gateway.
  * @since 0.1.4
  */
-class Client extends EventEmitter {
+class Client extends EventEmitter<ClientEvents> {
 	/** The Discord auth token to connect with. */
 	public token: string;
 	/** User specific options filled in with defaults if not specified. */
-	public options: Omit<import("./Types").IClientOptions, "snowtransferInstance"> & { token: string; endpoint?: string; };
+	public options: Omit<IClientOptions, "snowtransferInstance"> & { token: string; endpoint?: string; };
 	/** The manager of all of the shards used to connect to Discord. */
 	public shardManager: ShardManager;
 	/** The version string of CloudStorm. */
@@ -64,7 +36,7 @@ class Client extends EventEmitter {
 	 * @param token Token received from creating a discord bot user, which will be used to connect to the gateway.
 	 * @param options Baseline options to use. Will be filled with defaults if not specified.
 	 */
-	public constructor(token: string, options: import("./Types").IClientOptions = {}) {
+	public constructor(token: string, options: IClientOptions = {}) {
 		super();
 		if (!token) throw new Error("Missing token!");
 		this.options = {

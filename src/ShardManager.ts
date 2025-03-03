@@ -1,7 +1,14 @@
 "use strict";
 
+import type { EventEmitter } from "events";
+
 import Shard = require("./Shard");
 import { LocalBucket } from "snowtransfer";
+
+import {
+	IClientOptions,
+	ClientEvents
+} from "./Types";
 
 /**
  * Class used for managing shards for the user.
@@ -22,7 +29,7 @@ class ShardManager {
 	/**
 	 * Create a new ShardManager.
 	 */
-	public constructor(public client: import("events").EventEmitter & { options: Omit<import("./Types").IClientOptions, "snowtransferInstance"> & { token: string; endpoint?: string; } }) {
+	public constructor(public client: EventEmitter<ClientEvents> & { options: Omit<IClientOptions, "snowtransferInstance"> & { token: string; endpoint?: string; } }) {
 		this.options = client.options;
 	}
 

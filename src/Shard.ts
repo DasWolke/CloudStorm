@@ -3,27 +3,11 @@
 import { EventEmitter } from "events";
 import DC = require("./DiscordConnector");
 
-interface ShardEvents {
-	disconnect: [number, string, boolean];
-	ready: [boolean];
-	queueIdentify: [number];
-}
-
-interface Shard {
-	addListener<E extends keyof ShardEvents>(event: E, listener: (...args: ShardEvents[E]) => any): this;
-	emit<E extends keyof ShardEvents>(event: E, ...args: ShardEvents[E]): boolean;
-	eventNames(): Array<keyof ShardEvents>;
-	listenerCount(event: keyof ShardEvents): number;
-	listeners(event: keyof ShardEvents): Array<(...args: Array<any>) => any>;
-	off<E extends keyof ShardEvents>(event: E, listener: (...args: ShardEvents[E]) => any): this;
-	on<E extends keyof ShardEvents>(event: E, listener: (...args: ShardEvents[E]) => any): this;
-	once<E extends keyof ShardEvents>(event: E, listener: (...args: ShardEvents[E]) => any): this;
-	prependListener<E extends keyof ShardEvents>(event: E, listener: (...args: ShardEvents[E]) => any): this;
-	prependOnceListener<E extends keyof ShardEvents>(event: E, listener: (...args: ShardEvents[E]) => any): this;
-	rawListeners(event: keyof ShardEvents): Array<(...args: Array<any>) => any>;
-	removeAllListeners(event?: keyof ShardEvents): this;
-	removeListener<E extends keyof ShardEvents>(event: E, listener: (...args: ShardEvents[E]) => any): this;
-}
+import type {
+	ShardEvents,
+	ClientEvents,
+	IClientOptions
+} from "./Types"
 
 /**
  * Shard class, which provides a wrapper around the DiscordConnector with metadata like the id of the shard.
@@ -31,7 +15,7 @@ interface Shard {
  * This class is automatically instantiated by the library and is documented for reference.
  * @since 0.1.4
  */
-class Shard extends EventEmitter {
+class Shard extends EventEmitter<ShardEvents> {
 	/** If this shard has received the READY or RESUMED payload and isn't disconnected yet. */
 	public ready = false;
 	/** The connector that handles all of the Discord specific connection logic. */
@@ -42,7 +26,7 @@ class Shard extends EventEmitter {
 	 * @param id id of the shard.
 	 * @param client Main class used for forwarding events.
 	 */
-	public constructor(public id: number, public client: EventEmitter & { options: Omit<import("./Types").IClientOptions, "snowtransferInstance"> & { token: string; endpoint?: string; } }) {
+	public constructor(public id: number, public client: EventEmitter<ClientEvents> & { options: Omit<IClientOptions, "snowtransferInstance"> & { token: string; endpoint?: string; } }) {
 		super();
 
 		this.connector = new DC(id, client);

@@ -6,7 +6,7 @@
 
 import { EventEmitter } from "events";
 import { randomBytes, createHash } from "crypto";
-import { createInflate, inflateSync, constants } from "zlib";
+import { createInflate, inflateSync, constants, type Inflate } from "zlib";
 import https = require("https");
 import http = require("http");
 import util = require("util");
@@ -16,35 +16,16 @@ import { LocalBucket } from "snowtransfer";
 
 import type { Socket } from "net";
 
-interface BWSEvents {
-	ws_open: [];
-	ws_close: [number, string];
-	ws_receive: [any];
-	ws_send: [any];
-	debug: [string];
-}
-
-interface BetterWs {
-	addListener<E extends keyof BWSEvents>(event: E, listener: (...args: BWSEvents[E]) => any): this;
-	emit<E extends keyof BWSEvents>(event: E, ...args: BWSEvents[E]): boolean;
-	eventNames(): Array<keyof BWSEvents>;
-	listenerCount(event: keyof BWSEvents): number;
-	listeners(event: keyof BWSEvents): Array<(...args: Array<any>) => any>;
-	off<E extends keyof BWSEvents>(event: E, listener: (...args: BWSEvents[E]) => any): this;
-	on<E extends keyof BWSEvents>(event: E, listener: (...args: BWSEvents[E]) => any): this;
-	once<E extends keyof BWSEvents>(event: E, listener: (...args: BWSEvents[E]) => any): this;
-	prependListener<E extends keyof BWSEvents>(event: E, listener: (...args: BWSEvents[E]) => any): this;
-	prependOnceListener<E extends keyof BWSEvents>(event: E, listener: (...args: BWSEvents[E]) => any): this;
-	rawListeners(event: keyof BWSEvents): Array<(...args: Array<any>) => any>;
-	removeAllListeners(event?: keyof BWSEvents): this;
-	removeListener<E extends keyof BWSEvents>(event: E, listener: (...args: BWSEvents[E]) => any): this;
-}
+import type {
+	BWSEvents,
+	IClientWSOptions
+} from "./Types";
 
 /**
  * Helper Class for simplifying the websocket connection to Discord.
  * @since 0.1.4
  */
-class BetterWs extends EventEmitter {
+class BetterWs extends EventEmitter<BWSEvents> {
 	/** The encoding to send/receive messages to/from the server with. */
 	public encoding: "etf" | "json" | "other";
 	/** If the messages sent/received are compressed with zlib. */
@@ -62,7 +43,7 @@ class BetterWs extends EventEmitter {
 		/** A promise that resolves when the connection is fully closed or null if not closing the connection if any. */
 		closePromise: Promise<void> | null;
 		/** A zlib Inflate instance if messages sent/received are going to be compressed. Auto created on connect. */
-		zlib: import("zlib").Inflate | null;
+		zlib: Inflate | null;
 	} = {
 			openRejector: null,
 			closePromise: null,
@@ -80,7 +61,7 @@ class BetterWs extends EventEmitter {
 	 * @param address The http(s):// or ws(s):// URL cooresponding to the server to connect to.
 	 * @param options Options specific to this WebSocket.
 	 */
-	public constructor(public address: string, public options: Omit<import("./Types").IClientWSOptions, "encoding"> & { encoding?: import("./Types").IClientWSOptions["encoding"] | "other" }) {
+	public constructor(public address: string, public options: Omit<IClientWSOptions, "encoding"> & { encoding?: IClientWSOptions["encoding"] | "other" }) {
 		super();
 
 		this.encoding = options.encoding ?? "other";
@@ -397,7 +378,7 @@ class BetterWs extends EventEmitter {
 	}
 }
 
-function readRange(socket: import("net").Socket, index: number, bytes: number): number {
+function readRange(socket: Socket, index: number, bytes: number): number {
 	let cursor = 0;
 	let read = 0;
 	let num = 0;

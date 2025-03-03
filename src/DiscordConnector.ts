@@ -5,40 +5,25 @@ import BetterWs = require("./BetterWs");
 import { GATEWAY_OP_CODES as OP, GATEWAY_VERSION } from "./Constants";
 import Intents = require("./Intents");
 
-import type {
-	GatewayReceivePayload,
-	GatewayIdentify,
-	GatewayPresenceUpdateData,
-	GatewayVoiceStateUpdateData,
-	GatewayRequestGuildMembersData,
-	GatewayRequestGuildMembersDataWithQuery,
-	GatewayRequestGuildMembersDataWithUserIds
+import {
+	type GatewayReceivePayload,
+	type GatewayIdentify,
+	type GatewayPresenceUpdateData,
+	type GatewayVoiceStateUpdateData,
+	type GatewayRequestGuildMembersData,
+	type GatewayRequestGuildMembersDataWithQuery,
+	type GatewayRequestGuildMembersDataWithUserIds,
+
+	PresenceUpdateStatus
 } from "discord-api-types/v10";
 
-import { PresenceUpdateStatus } from "discord-api-types/v10";
-
-interface ConnectorEvents {
-	queueIdentify: [number];
-	ready: [boolean];
-	disconnect: [number, string, boolean];
-	stateChange: ["connecting" | "identifying" | "resuming" | "ready" | "disconnected"]
-}
-
-interface DiscordConnector {
-	addListener<E extends keyof ConnectorEvents>(event: E, listener: (...args: ConnectorEvents[E]) => any): this;
-	emit<E extends keyof ConnectorEvents>(event: E, ...args: ConnectorEvents[E]): boolean;
-	eventNames(): Array<keyof ConnectorEvents>;
-	listenerCount(event: keyof ConnectorEvents): number;
-	listeners(event: keyof ConnectorEvents): Array<(...args: Array<any>) => any>;
-	off<E extends keyof ConnectorEvents>(event: E, listener: (...args: ConnectorEvents[E]) => any): this;
-	on<E extends keyof ConnectorEvents>(event: E, listener: (...args: ConnectorEvents[E]) => any): this;
-	once<E extends keyof ConnectorEvents>(event: E, listener: (...args: ConnectorEvents[E]) => any): this;
-	prependListener<E extends keyof ConnectorEvents>(event: E, listener: (...args: ConnectorEvents[E]) => any): this;
-	prependOnceListener<E extends keyof ConnectorEvents>(event: E, listener: (...args: ConnectorEvents[E]) => any): this;
-	rawListeners(event: keyof ConnectorEvents): Array<(...args: Array<any>) => any>;
-	removeAllListeners(event?: keyof ConnectorEvents): this;
-	removeListener<E extends keyof ConnectorEvents>(event: E, listener: (...args: ConnectorEvents[E]) => any): this;
-}
+import type {
+	ConnectorEvents,
+	ClientEvents,
+	IClientOptions,
+	IGatewayMessage,
+	IGatewayDispatch
+} from "./Types";
 
 const resumableCodes = [4008, 4005, 4003, 4002, 4001, 4000, 1006, 1001];
 const shouldntAttemptReconnectCodes = [4014, 4013, 4012, 4011, 4010, 4004];
@@ -68,7 +53,7 @@ const wsStatusTypes = ["Whatever 0 is. Report if you see this", "connected", "co
  * This class is automatically instantiated by the library and is documented for reference.
  * @since 0.1.4
  */
-class DiscordConnector extends EventEmitter {
+class DiscordConnector extends EventEmitter<ConnectorEvents> {
 	/** The options used by the client */
 	public options: DiscordConnector["client"]["options"];
 	/** If this connector will attempt to automatically reconnect */
@@ -114,7 +99,7 @@ class DiscordConnector extends EventEmitter {
 	 * @param id id of the shard that created this class.
 	 * @param client Main client instance.
 	 */
-	public constructor(public id: number, public client: EventEmitter & { options: Omit<import("./Types").IClientOptions, "snowtransferInstance"> & { token: string; endpoint?: string; } }) {
+	public constructor(public id: number, public client: EventEmitter<ClientEvents> & { options: Omit<IClientOptions, "snowtransferInstance"> & { token: string; endpoint?: string; } }) {
 		super();
 
 		this.options = client.options;
@@ -173,7 +158,7 @@ class DiscordConnector extends EventEmitter {
 	 */
 	private async messageAction(message: GatewayReceivePayload): Promise<void> {
 		this.client.emit("rawReceive", message);
-		const withShardID: import("./Types").IGatewayMessage = Object.assign(message, { shard_id: this.id });
+		const withShardID: IGatewayMessage = Object.assign(message, { shard_id: this.id });
 		this.client.emit("event", withShardID);
 
 		switch (withShardID.op) {
@@ -363,7 +348,7 @@ class DiscordConnector extends EventEmitter {
 	 * @since 0.1.4
 	 * @param message Message received from the websocket.
 	 */
-	private handleDispatch(message: import("./Types").IGatewayDispatch): void {
+	private handleDispatch(message: IGatewayDispatch): void {
 		this.client.emit("dispatch", message);
 
 		if (message.s) { // sequence is from dispatch
