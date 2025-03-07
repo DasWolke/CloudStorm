@@ -42,11 +42,14 @@ class BetterWs extends EventEmitter<BWSEvents> {
 		openRejector: ((reason?: any) => void) | null;
 		/** A promise that resolves when the connection is fully closed or null if not closing the connection if any. */
 		closePromise: Promise<void> | null;
+		/** A timer when the socket is half closing where the server MUST close it OR ELSE */
+		closeTimer: NodeJS.Timeout | null,
 		/** A zlib Inflate instance if messages sent/received are going to be compressed. Auto created on connect. */
 		zlib: Inflate | null;
 	} = {
 			openRejector: null,
 			closePromise: null,
+			closeTimer: null,
 			zlib: null
 		};
 	/** If a request is going through to initiate a WebSocket connection and hasn't been upgraded by the server yet. */
@@ -149,6 +152,8 @@ class BetterWs extends EventEmitter<BWSEvents> {
 		// @ts-ignore
 		promise.resolve = resolver;
 		internal.closePromise = promise;
+		if (internal.closeTimer) clearTimeout(internal.closeTimer);
+		internal.closeTimer = setTimeout(() => this._onClose(), 5000); // Half close and set a hard time frame for the server to respond.
 		return promise;
 	}
 
@@ -260,6 +265,8 @@ class BetterWs extends EventEmitter<BWSEvents> {
 	 * @since 0.4.1
 	 */
 	private _onClose(): void {
+		if (this._internal.closeTimer) clearTimeout(this._internal.closeTimer);
+		this._internal.closeTimer = null;
 		const socket = this._socket;
 		const internal = this._internal;
 		if (!socket) return;
