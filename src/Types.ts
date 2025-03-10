@@ -46,6 +46,7 @@ export type BWSEvents = {
 	ws_receive: [any];
 	ws_send: [any];
 	debug: [string];
+	error: [string];
 }
 
 export type ClientEvents = {

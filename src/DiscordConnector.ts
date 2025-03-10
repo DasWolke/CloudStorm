@@ -5,6 +5,8 @@ import BetterWs = require("./BetterWs");
 import { GATEWAY_OP_CODES as OP, GATEWAY_VERSION } from "./Constants";
 import Intents = require("./Intents");
 
+import { LocalBucket } from "snowtransfer";
+
 import {
 	type GatewayReceivePayload,
 	type GatewayIdentify,
@@ -13,6 +15,7 @@ import {
 	type GatewayRequestGuildMembersData,
 	type GatewayRequestGuildMembersDataWithQuery,
 	type GatewayRequestGuildMembersDataWithUserIds,
+	type GatewaySendPayload,
 
 	PresenceUpdateStatus
 } from "discord-api-types/v10";
@@ -42,8 +45,6 @@ const disconnectMessages = {
 	4002: "You sent an invalid payload.",
 	4001: "You sent an invalid opcode or invalid payload for an opcode."
 };
-
-const connectionError = new Error("WS took too long to connect. Is your internet okay?");
 
 const wsStatusTypes = ["Whatever 0 is. Report if you see this", "connected", "connecting", "closing", "closed"];
 
@@ -84,6 +85,10 @@ class DiscordConnector extends EventEmitter<ConnectorEvents> {
 	public resumeAddress: string | null = null;
 	/** If this connector is disconnected/disconnecting currently, but will reconnect eventually */
 	public reconnecting = false;
+	/** The ratelimit bucket for how many packets this ws can send within a time frame. */
+	public wsBucket = new LocalBucket(120, 60000);
+	/** The ratelimit bucket for how many presence update specific packets this ws can send within a time frame. Is still affected by the overall packet send bucket. */
+	public presenceBucket = new LocalBucket(5, 60000);
 
 	/** If this connector is waiting to be fully closed */
 	private _closing = false;
@@ -119,8 +124,12 @@ class DiscordConnector extends EventEmitter<ConnectorEvents> {
 		});
 		this.betterWs.on("ws_receive", msg => this.messageAction(msg));
 		this.betterWs.on<"ws_close">("ws_close", (code, reason) => this.handleWsClose(code, reason));
-		this.betterWs.on("debug", event => this.client.emit("error", event));
+		this.betterWs.on("debug", event => this.client.emit("debug", `Shard ${this.id} ${event}`));
+		this.betterWs.on("error", event => this.client.emit("error", event));
 		this.betterWs.on("ws_send", data => this.client.emit("rawSend", data));
+
+		this.wsBucket.queue.setBlocked(true);
+		this.presenceBucket.queue.setBlocked(true);
 	}
 
 	/**
@@ -133,8 +142,7 @@ class DiscordConnector extends EventEmitter<ConnectorEvents> {
 		this.client.emit("debug", `Shard ${this.id} connecting to gateway`);
 		// The address should already be updated if resuming/identifying
 		return this.betterWs.connect()
-			.catch(e => { // All errors unless irrecoverable should attempt to reconnect
-				if (e === connectionError) return;
+			.catch(() => {
 				setTimeout(() => {
 					if (!this._closeCalled) this.connect();
 				}, 5000);
@@ -148,6 +156,8 @@ class DiscordConnector extends EventEmitter<ConnectorEvents> {
 	public async disconnect(): Promise<void> {
 		this._closing = true;
 		this._closeCalled = true;
+		this.wsBucket.queue.setBlocked(true);
+		this.presenceBucket.queue.setBlocked(true);
 		return this.betterWs.close(1000, "Disconnected by User");
 	}
 
@@ -213,6 +223,8 @@ class DiscordConnector extends EventEmitter<ConnectorEvents> {
 	 */
 	private async _reconnect(resume = false): Promise<void> {
 		this.reconnecting = resume;
+		this.wsBucket.queue.setBlocked(true);
+		this.presenceBucket.queue.setBlocked(true);
 		await this.betterWs.close(resume ? 4000 : 1012, "reconnecting");
 		if (resume) {
 			this.clearHeartBeat();
@@ -369,6 +381,8 @@ class DiscordConnector extends EventEmitter<ConnectorEvents> {
 			this.emit("stateChange", "ready");
 			this._trace = (message.d as unknown as { _trace: string })._trace;
 			this.emit("ready", message.t === "RESUMED");
+			this.wsBucket.queue.setBlocked(false);
+			this.presenceBucket.queue.setBlocked(false);
 			break;
 		default:
 			void 0;
@@ -386,6 +400,8 @@ class DiscordConnector extends EventEmitter<ConnectorEvents> {
 		this.status = "disconnected";
 		this.emit("stateChange", "disconnected");
 		this.clearHeartBeat();
+		this.wsBucket.queue.setBlocked(true);
+		this.presenceBucket.queue.setBlocked(true);
 
 		const isManualClose = code === 1000 && this._closing;
 
@@ -413,7 +429,7 @@ class DiscordConnector extends EventEmitter<ConnectorEvents> {
 	 * @param data Presence data to send.
 	 */
 	public async presenceUpdate(data: Partial<GatewayPresenceUpdateData>): Promise<void> {
-		return this.betterWs.sendMessage({ op: OP.PRESENCE_UPDATE, d: this._checkPresenceData(data) });
+		return this.sendMessage({ op: OP.PRESENCE_UPDATE, d: this._checkPresenceData(data) });
 	}
 
 	/**
@@ -423,7 +439,7 @@ class DiscordConnector extends EventEmitter<ConnectorEvents> {
 	 */
 	public async voiceStateUpdate(data: GatewayVoiceStateUpdateData & { self_deaf?: boolean; self_mute?: boolean; }): Promise<void> {
 		if (!data) return Promise.resolve();
-		return this.betterWs.sendMessage({ op: OP.VOICE_STATE_UPDATE, d: this._checkVoiceStateUpdateData(data) });
+		return this.sendMessage({ op: OP.VOICE_STATE_UPDATE, d: this._checkVoiceStateUpdateData(data) });
 	}
 
 	/**
@@ -432,7 +448,30 @@ class DiscordConnector extends EventEmitter<ConnectorEvents> {
 	 * @param data Data to send.
 	 */
 	public async requestGuildMembers(data: GatewayRequestGuildMembersData & { limit?: number; }): Promise<void> {
-		return this.betterWs.sendMessage({ op: OP.REQUEST_GUILD_MEMBERS, d: this._checkRequestGuildMembersData(data) });
+		return this.sendMessage({ op: OP.REQUEST_GUILD_MEMBERS, d: this._checkRequestGuildMembersData(data) });
+	}
+
+	/**
+	 * Sends a message to the server in the format of { op: number, d: any } (before any encoding/compression).
+	 * @since 0.12.0
+	 * @param data Packet to send to Discord.
+	 * @returns A Promise that resolves when the message passes the bucket queue(s).
+	 */
+	public async sendMessage(data: GatewaySendPayload): Promise<void> {
+		const presence = data.op === OP.PRESENCE_UPDATE;
+		const bypass = this.options.ws!.bypassBuckets;
+		return new Promise<void>(res => {
+			const sendMsg = () => {
+				const fn = () => {
+					this.betterWs.sendMessage(data);
+					res(void 0);
+				};
+				if (bypass) fn();
+				else this.wsBucket.enqueue(fn);
+			};
+			if (presence && !bypass) this.presenceBucket.enqueue(sendMsg);
+			else sendMsg();
+		});
 	}
 
 	/**
