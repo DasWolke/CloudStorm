@@ -212,7 +212,6 @@ class DiscordConnector extends EventEmitter<ConnectorEvents> {
 	 * @param resume Whether or not the client intends to send an OP 6 RESUME later.
 	 */
 	private async _reconnect(resume = false): Promise<void> {
-		this.betterWs._internal.openRejector?.(connectionError); // If the client is still attempting to connect, but _reconnect is *somehow* called, destroy the request and just try to reconnect.
 		this.reconnecting = resume;
 		await this.betterWs.close(resume ? 4000 : 1012, "reconnecting");
 		if (resume) {
