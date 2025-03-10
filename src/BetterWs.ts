@@ -1,6 +1,6 @@
 "use strict";
 
-// This ultra light weigth WS code is a slimmed down version originally found at https://github.com/timotejroiko/tiny-discord
+// This ultra light weight WS code is a slimmed down version originally found at https://github.com/timotejroiko/tiny-discord
 // Modifications and use of this code was granted for this project by the author, Timotej Roiko.
 // A major thank you to Tim for better performing software.
 
@@ -22,6 +22,26 @@ import type {
 } from "./Types";
 
 /**
+ * Call with an emitter and an object of callbacks, and the first event to be emitted will call the callback.
+ * If the callback returns a promise, waits for the promise to resolve or reject. eventSwitch will resolve or reject with the same value.
+ * All added listeners are removed before eventSwitch returns.
+ */
+function eventSwitch(emitter: EventEmitter, cbs: {[eventName: string]: (...args: any[]) => any}) {
+	const realListeners = new Map()
+	return Promise.race(Object.entries(cbs).map(([event, cb]) =>
+		new Promise((resolve, reject) => {
+			const l = (...args) => (async () => cb(...args))().then(resolve, reject)
+			realListeners.set(event, l)
+			emitter.once(event, l)
+		})
+	)).finally(() => {
+		for (const [event, l] of realListeners.entries()) {
+			emitter.removeListener(event, l)
+		}
+	})
+}
+
+/**
  * Helper Class for simplifying the websocket connection to Discord.
  * @since 0.1.4
  */
@@ -39,7 +59,6 @@ class BetterWs extends EventEmitter<BWSEvents> {
 	private _socket: Socket | null = null;
 	/** Internal properties that need a funny way to be referenced. */
 	public _internal: {
-		openRejector: ((reason?: any) => void) | null;
 		/** A promise that resolves when the connection is fully closed or null if not closing the connection if any. */
 		closePromise: Promise<void> | null;
 		/** A timer when the socket is half closing where the server MUST close it OR ELSE */
@@ -47,7 +66,6 @@ class BetterWs extends EventEmitter<BWSEvents> {
 		/** A zlib Inflate instance if messages sent/received are going to be compressed. Auto created on connect. */
 		zlib: Inflate | null;
 	} = {
-			openRejector: null,
 			closePromise: null,
 			closeTimer: null,
 			zlib: null
@@ -86,7 +104,7 @@ class BetterWs extends EventEmitter<BWSEvents> {
 	 * Initiates a WebSocket connection to the server.
 	 * @since 0.4.1
 	 */
-	public connect(): Promise<void> {
+	public connect(): Promise<any> {
 		if (this._socket || this._connecting) return Promise.resolve(void 0);
 		this._connecting = true;
 		const key = randomBytes(16).toString("base64");
@@ -105,29 +123,29 @@ class BetterWs extends EventEmitter<BWSEvents> {
 				...this.options.headers
 			}
 		});
-		let onErrorRef: ((e: Error) => void) | undefined;
-		let cameFromOnError = false;
-		return new Promise<void>((resolve, reject) => {
-			this._internal.openRejector = reject;
-			const upgrade = this._onUpgrade.bind(this, key, req, resolve, reject);
-			onErrorRef = e => { // Promises can only be resolved/rejected once. _onUpgrade removes all req error events after resolve
-				this._internal.openRejector = null;
-				cameFromOnError = true;
-				this._connecting = false;
-				req.removeListener("upgrade", upgrade);
-				reject(e);
-			};
-			req.once("upgrade", upgrade);
-			req.once("error", onErrorRef);
-			req.end();
-		}).catch(reason => {
-			if (onErrorRef && !cameFromOnError) {
-				req.destroy();
-				req.removeListener("error", onErrorRef);
-				onErrorRef(reason);
+		req.end();
+		return eventSwitch(req, {
+			upgrade: (res, socket, _head) => {
+				try {
+					this._onUpgrade(key, res, socket);
+				} catch (e) {
+					req.destroy();
+				}
+			},
+			error: e => {
+				throw e;
+			},
+			response: (res: http.ServerResponse) => {
+				req.destroy()
+				if (req.socket && !req.socket.destroyed) {
+					req.socket.destroy();
+				}
+				this._internal.closePromise = this._socket = null; // just in case these are set, unset them so the `status` is 4 = closed
+				throw new Error(`Expected HTTP 101 Upgrade, but got ${res.statusCode} ${res.statusMessage}`);
 			}
-			return Promise.reject(reason as Error);
-		});
+		}).finally(() => {
+			this._connecting = false;
+		})
 	}
 
 	/**
@@ -221,23 +239,20 @@ class BetterWs extends EventEmitter<BWSEvents> {
 	 * @param res The HTTP response from the server from connect.
 	 * @param socket The raw socket from upgrading the request from connect.
 	 */
-	private _onUpgrade(key: string, req: http.ClientRequest, resolve: (value: void | PromiseLike<void>) => void, reject: (reason?: any) => void, res: http.IncomingMessage, socket: Socket): void {
-		this._internal.openRejector = null;
+	private _onUpgrade(key: string, res: http.IncomingMessage, socket: Socket): void {
 		const hash = createHash("sha1").update(key + "258EAFA5-E914-47DA-95CA-C5AB0DC85B11").digest("base64");
 		const accept = res.headers["sec-websocket-accept"];
 		if (hash !== accept) {
 			socket.end(() => {
 				this.emit("debug", "Failed websocket-key validation");
 				this._connecting = false;
-				reject(new Error(`Invalid Sec-Websocket-Accept | expected: ${hash} | received: ${accept}`));
 			});
-			return;
+			throw new Error(`Invalid Sec-Websocket-Accept | expected: ${hash} | received: ${accept}`);
 		}
 		socket.once("error", this._onError.bind(this)); // the conection is closed after 1 error
 		socket.once("close", this._onClose.bind(this)); // socket gets de-referenced from this on close
 		socket.on("readable", this._onReadable.bind(this));
 		this._socket = socket;
-		this._connecting = false;
 		if (this.compress) {
 			const z = createInflate();
 			// @ts-ignore
@@ -245,8 +260,6 @@ class BetterWs extends EventEmitter<BWSEvents> {
 			this._internal.zlib = z;
 		}
 		this.emit("ws_open");
-		resolve(void 0);
-		req.removeAllListeners("error");
 	}
 
 	/**
