@@ -10,9 +10,6 @@ import { createInflate, inflateSync, constants, type Inflate } from "zlib";
 import https = require("https");
 import http = require("http");
 import util = require("util");
-import { GATEWAY_OP_CODES } from "./Constants";
-
-import { LocalBucket } from "snowtransfer";
 
 import type { Socket } from "net";
 
@@ -26,19 +23,19 @@ import type {
  * If the callback returns a promise, waits for the promise to resolve or reject. eventSwitch will resolve or reject with the same value.
  * All added listeners are removed before eventSwitch returns.
  */
-function eventSwitch(emitter: EventEmitter, cbs: {[eventName: string]: (...args: any[]) => any}) {
-	const realListeners = new Map()
-	return Promise.race(Object.entries(cbs).map(([event, cb]) =>
-		new Promise((resolve, reject) => {
-			const l = (...args) => (async () => cb(...args))().then(resolve, reject)
-			realListeners.set(event, l)
-			emitter.once(event, l)
-		})
-	)).finally(() => {
+function eventSwitch(emitter: EventEmitter, cbs: { [eventName: string]: (...args: any[]) => any }): Promise<void> {
+	const realListeners = new Map<string, (...args: Array<any>) => void>();
+	return Promise.race(Object.entries(cbs).map(([event, cb]) => {
+		return new Promise<void>((resolve, reject) => {
+			const l = (...args: Array<any>) => (async () => cb(...args))().then(resolve, reject);
+			realListeners.set(event, l);
+			emitter.once(event, l);
+		});
+	})).finally(() => {
 		for (const [event, l] of realListeners.entries()) {
-			emitter.removeListener(event, l)
+			emitter.removeListener(event, l);
 		}
-	})
+	});
 }
 
 /**
@@ -50,10 +47,6 @@ class BetterWs extends EventEmitter<BWSEvents> {
 	public encoding: "etf" | "json" | "other";
 	/** If the messages sent/received are compressed with zlib. */
 	public compress: boolean;
-	/** The ratelimit bucket for how many packets this ws can send within a time frame. */
-	public wsBucket = new LocalBucket(120, 60000);
-	/** The ratelimit bucket for how many presence update specific packets this ws can send within a time frame. Is still affected by the overall packet send bucket. */
-	public presenceBucket = new LocalBucket(5, 60000);
 
 	/** The raw net.Socket retreived from upgrading the connection or null if not upgraded/closed. */
 	private _socket: Socket | null = null;
@@ -104,7 +97,7 @@ class BetterWs extends EventEmitter<BWSEvents> {
 	 * Initiates a WebSocket connection to the server.
 	 * @since 0.4.1
 	 */
-	public connect(): Promise<any> {
+	public connect(): Promise<void> {
 		if (this._socket || this._connecting) return Promise.resolve(void 0);
 		this._connecting = true;
 		const key = randomBytes(16).toString("base64");
@@ -124,8 +117,9 @@ class BetterWs extends EventEmitter<BWSEvents> {
 			}
 		});
 		req.end();
+		this.emit("debug", "Socket sending request to upgrade");
 		return eventSwitch(req, {
-			upgrade: (res, socket, _head) => {
+			upgrade: (res: http.IncomingMessage, socket: Socket) => {
 				try {
 					this._onUpgrade(key, res, socket);
 				} catch (e) {
@@ -136,16 +130,14 @@ class BetterWs extends EventEmitter<BWSEvents> {
 				throw e;
 			},
 			response: (res: http.ServerResponse) => {
-				req.destroy()
-				if (req.socket && !req.socket.destroyed) {
-					req.socket.destroy();
-				}
+				req.destroy();
+				if (req.socket && !req.socket.destroyed) req.socket.destroy();
 				this._internal.closePromise = this._socket = null; // just in case these are set, unset them so the `status` is 4 = closed
 				throw new Error(`Expected HTTP 101 Upgrade, but got ${res.statusCode} ${res.statusMessage}`);
 			}
 		}).finally(() => {
 			this._connecting = false;
-		})
+		});
 	}
 
 	/**
@@ -156,6 +148,7 @@ class BetterWs extends EventEmitter<BWSEvents> {
 	 * @returns A Promise that resolves when the connection is fully closed.
 	 */
 	public async close(code: number, reason?: string): Promise<void> {
+		this.emit("debug", `Socket attempting to close`);
 		const internal = this._internal;
 		if (internal.closePromise) return internal.closePromise;
 		if (!this._socket) return Promise.resolve(void 0);
@@ -164,6 +157,7 @@ class BetterWs extends EventEmitter<BWSEvents> {
 			resolver = resolve;
 			const from = Buffer.from([code >> 8, code & 255]);
 			this._write(reason ? Buffer.concat([from, Buffer.from(reason)]) : from, 8);
+			this.emit("debug", "Socket wrote fin packet");
 		}).then(() => {
 			internal.closePromise = null;
 		});
@@ -171,33 +165,24 @@ class BetterWs extends EventEmitter<BWSEvents> {
 		promise.resolve = resolver;
 		internal.closePromise = promise;
 		if (internal.closeTimer) clearTimeout(internal.closeTimer);
-		internal.closeTimer = setTimeout(() => this._onClose(), 5000); // Half close and set a hard time frame for the server to respond.
+		internal.closeTimer = setTimeout(() => {
+			this.emit("debug", "Server didn't respond for a full close in time");
+			this._onClose();
+		}, 5000); // Half close and set a hard time frame for the server to respond.
 		return promise;
 	}
 
 	/**
-	 * Sends a message to the server in the format of { op: number, d: any } (before any encoding/compression).
+	 * Sends a message to the server.
 	 * @since 0.1.4
 	 * @param data What to send to the server.
 	 * @returns A Promise that resolves when the message passes the bucket queue(s) and is written to the socket's Buffer to send.
 	 */
-	public sendMessage(data: any): Promise<void> {
-		return new Promise(res => {
-			const presence = data?.op === GATEWAY_OP_CODES.PRESENCE_UPDATE;
-			const sendMsg = () => {
-				const fn = () => {
-					this.emit("ws_send", data);
-					if (this.encoding === "json") this._write(Buffer.from(JSON.stringify(data)), 1);
-					else if (this.encoding === "etf") this._write(writeETF(data), 2);
-					else if (this.encoding === "other") this._write(Buffer.from(data), 2);
-					res(void 0);
-				};
-				if (this.options.bypassBuckets) fn();
-				else this.wsBucket.enqueue(fn);
-			};
-			if (presence && !this.options.bypassBuckets) this.presenceBucket.enqueue(sendMsg);
-			else sendMsg();
-		});
+	public sendMessage(data: any): void {
+		if (this.encoding === "json") this._write(Buffer.from(JSON.stringify(data)), 1);
+		else if (this.encoding === "etf") this._write(writeETF(data), 2);
+		else if (this.encoding === "other") this._write(Buffer.from(data), 2);
+		this.emit("ws_send", data);
 	}
 
 	/**
@@ -244,8 +229,7 @@ class BetterWs extends EventEmitter<BWSEvents> {
 		const accept = res.headers["sec-websocket-accept"];
 		if (hash !== accept) {
 			socket.end(() => {
-				this.emit("debug", "Failed websocket-key validation");
-				this._connecting = false;
+				this.emit("error", "Failed websocket-key validation");
 			});
 			throw new Error(`Invalid Sec-Websocket-Accept | expected: ${hash} | received: ${accept}`);
 		}
@@ -269,7 +253,7 @@ class BetterWs extends EventEmitter<BWSEvents> {
 	 */
 	private _onError(error: Error): void {
 		if (!this._socket) return;
-		this.emit("debug", util.inspect(error, true, 1, false));
+		this.emit("error", util.inspect(error, true, 1, false));
 		this._write(Buffer.allocUnsafe(0), 8);
 	}
 
@@ -282,21 +266,25 @@ class BetterWs extends EventEmitter<BWSEvents> {
 		this._internal.closeTimer = null;
 		const socket = this._socket;
 		const internal = this._internal;
+		this.emit("debug", "Socket _onClose called");
 		if (!socket) return;
 		socket.removeListener("data", this._onReadable);
 		socket.removeListener("error", this._onError);
-		this.wsBucket.dropQueue();
-		this.presenceBucket.dropQueue();
 		this._socket = null;
-		this.emit("ws_close", this._lastCloseCode ?? 1006, this._lastCloseReason ?? "Abnormal Closure");
-		this._lastCloseCode = null;
-		this._lastCloseReason = null;
+
+		if (internal.closePromise) {
+			// @ts-expect-error Shut
+			internal.closePromise.resolve(void 0);
+			this.emit("debug", "Socket closePromise resolved");
+		} else this.emit("debug", "Socket didn't have a closePromise to resolve");
+
 		if (internal.zlib) {
 			internal.zlib.close();
 			internal.zlib = null;
 		}
-		// @ts-ignore
-		if (internal.closePromise) internal.closePromise.resolve(void 0);
+		this.emit("ws_close", this._lastCloseCode ?? 1006, this._lastCloseReason ?? "Abnormal Closure");
+		this._lastCloseCode = null;
+		this._lastCloseReason = null;
 	}
 
 	/**
@@ -305,7 +293,7 @@ class BetterWs extends EventEmitter<BWSEvents> {
 	 */
 	private _onReadable(): void {
 		const socket = this._socket;
-		while((socket?.readableLength || 0) > 1) {
+		while((socket?.readableLength ?? 0) > 1) {
 			let length = readRange(socket!, 1, 1) & 127;
 			let bytes = 0;
 			if (length > 125) {
@@ -317,7 +305,7 @@ class BetterWs extends EventEmitter<BWSEvents> {
 			if (!frame) return;
 			const fin = frame[0] >> 7;
 			const opcode = frame[0] & 15;
-			if (fin !== 1 || opcode === 0) this.emit("debug", "discord actually does send messages with fin=0. if you see this error let me know");
+			if (fin !== 1 || opcode === 0) this.emit("error", "discord actually does send messages with fin=0. if you see this error let me know");
 			const payload = frame.subarray(2 + bytes);
 			this._processFrame(opcode, payload);
 		}
@@ -354,7 +342,7 @@ class BetterWs extends EventEmitter<BWSEvents> {
 					error = e;
 				}
 				const l = message.length;
-				if (message[l - 4] !== 0 || message[l - 3] !== 0 || message[l - 2] !== 255 || message[l - 1] !== 255) this.emit("debug", "discord actually does send fragmented zlib messages. If you see this error let me know");
+				if (message[l - 4] !== 0 || message[l - 3] !== 0 || message[l - 2] !== 255 || message[l - 1] !== 255) this.emit("error", "discord actually does send fragmented zlib messages. If you see this error let me know");
 				// @ts-ignore
 				z.close = z._c;
 				// @ts-ignore
@@ -367,12 +355,12 @@ class BetterWs extends EventEmitter<BWSEvents> {
 				z._eventCount--;
 				z!.removeAllListeners("error");
 				if (error) {
-					this.emit("debug", "Zlib error processing chunk");
+					this.emit("error", "Zlib error processing chunk");
 					this._write(Buffer.allocUnsafe(0), 8);
 					return;
 				}
 				if (!data) {
-					this.emit("debug", "Data from zlib processing was null. If you see this error let me know"); // This should never run, but TS is lame
+					this.emit("error", "Data from zlib processing was null. If you see this error let me know"); // This should never run, but TS is lame
 					return;
 				}
 				if (this.encoding === "json") packet = JSON.parse(String(data));
