@@ -57,8 +57,6 @@ const wsStatusTypes = ["Whatever 0 is. Report if you see this", "connected", "co
 class DiscordConnector extends EventEmitter<ConnectorEvents> {
 	/** The options used by the client */
 	public options: DiscordConnector["client"]["options"];
-	/** If this connector will attempt to automatically reconnect */
-	public reconnect: boolean;
 	/** The WebSocket this connector uses */
 	public betterWs: BetterWs;
 	/** A Timeout that, when triggered, will send an op 1 heartbeat. Is null if Discord hasn't told this connector how often to heartbeat */
@@ -108,7 +106,6 @@ class DiscordConnector extends EventEmitter<ConnectorEvents> {
 		super();
 
 		this.options = client.options;
-		this.reconnect = this.options.reconnect ?? true;
 		this.identifyAddress = this.options.endpoint!;
 
 		this.betterWs = new BetterWs(this.identifyAddress, this.options.ws!);
@@ -182,8 +179,7 @@ class DiscordConnector extends EventEmitter<ConnectorEvents> {
 
 		case OP.RECONNECT:
 			this.client.emit("debug", `Gateway asked shard ${this.id} to reconnect`);
-			if (this.reconnect) this._reconnect(true);
-			else this.disconnect();
+			this._reconnect(true);
 			break;
 
 		case OP.INVALID_SESSION:
@@ -203,7 +199,8 @@ class DiscordConnector extends EventEmitter<ConnectorEvents> {
 			this.heartbeatInterval = withShardID.d.heartbeat_interval;
 			this._initialHeartbeatTimeout = setTimeout(() => this.heartbeat(), this.heartbeatInterval * Math.random());
 			this._trace = (withShardID.d as unknown as { _trace: string })._trace;
-			this._onHello();
+			if (this.sessionId) return void this.resume();
+			else this.emit("queueIdentify", this.id);
 			break;
 
 		case OP.HEARTBEAT_ACK:
@@ -234,7 +231,6 @@ class DiscordConnector extends EventEmitter<ConnectorEvents> {
 			this.reset();
 			this.betterWs.address = this.identifyAddress;
 		}
-		this.connect();
 	}
 
 	/**
@@ -257,8 +253,7 @@ class DiscordConnector extends EventEmitter<ConnectorEvents> {
 		this.heartbeatTimeout = setInterval(() => {
 			if (this.lastACKAt <= Date.now() - (this.heartbeatInterval + 5000)) {
 				this.client.emit("debug", `Shard ${this.id} has not received a heartbeat ACK in ${this.heartbeatInterval + 5000}ms.`);
-				if (this.reconnect) this._reconnect(true);
-				else this.disconnect();
+				this._reconnect(true);
 			} else this.heartbeat();
 		}, this.heartbeatInterval);
 	}
@@ -273,14 +268,6 @@ class DiscordConnector extends EventEmitter<ConnectorEvents> {
 		this.heartbeatTimeout = null;
 		this._initialHeartbeatTimeout = null;
 		this.heartbeatInterval = 0;
-	}
-
-	/**
-	 * @since 0.10.0
-	 */
-	private _onHello(): void {
-		if (this.sessionId) return void this.resume();
-		else this.emit("queueIdentify", this.id);
 	}
 
 	/**
@@ -420,7 +407,7 @@ class DiscordConnector extends EventEmitter<ConnectorEvents> {
 
 		this.emit("disconnect", code, reason, gracefulClose);
 
-		if (!shouldntReconnect && this.reconnect) this.connect();
+		if (!shouldntReconnect) this.connect();
 	}
 
 	/**

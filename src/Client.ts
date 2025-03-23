@@ -42,7 +42,6 @@ class Client extends EventEmitter<ClientEvents> {
 		this.options = {
 			largeGuildThreshold: 250,
 			shards: "auto",
-			reconnect: true,
 			intents: 0,
 			token: "",
 			ws: {
@@ -53,6 +52,8 @@ class Client extends EventEmitter<ClientEvents> {
 		this._restClient = options.snowtransferInstance ? options.snowtransferInstance : new SnowTransfer(token);
 		delete options.snowtransferInstance;
 		this.token = token.startsWith("Bot ") ? token.substring(4) : token;
+		if (options.ws) Object.assign(this.options.ws!, options.ws);
+		delete options.ws;
 		Object.assign(this.options, options);
 		this.options.token = token;
 		this.shardManager = new ShardManager(this);
@@ -79,22 +80,15 @@ class Client extends EventEmitter<ClientEvents> {
 	public async fetchConnectInfo(): Promise<number> {
 		const gateway = await this.getGatewayBot();
 		this._updateEndpoint(gateway.url);
-		const oldQueueConcurrency = [] as Array<() => unknown>;
-		const oldQueueIdentify = [] as Array<() => unknown>;
-		if (this.shardManager.concurrencyBucket?.queue.calls.length) {
-			oldQueueConcurrency.push(...this.shardManager.concurrencyBucket.queue.calls);
-			this.shardManager.concurrencyBucket.dropQueue();
-		}
-		if (this.shardManager.identifyBucket.queue.calls.length) oldQueueIdentify.push(...this.shardManager.identifyBucket.queue.calls);
-		this.shardManager.identifyBucket.dropQueue();
-		this.shardManager.concurrencyBucket = new LocalBucket(gateway.session_start_limit.max_concurrency, 5000);
 		this.shardManager.identifyBucket.remaining = gateway.session_start_limit.remaining;
 		this.shardManager.identifyBucket.reset = gateway.session_start_limit.reset_after;
-		for (const fn of oldQueueConcurrency) {
-			this.shardManager.concurrencyBucket.enqueue(fn);
+		this.shardManager.identifyBucket.makeResetTimeout(this.shardManager.identifyBucket.reset);
+		if (this.shardManager.identifyBucket.queue.blocked && this.shardManager.identifyBucket.remaining) this.shardManager.identifyBucket.queue.setBlocked(false);
+		for (const route of Object.keys(this.shardManager.concurrencyBuckets)) {
+			delete this.shardManager.concurrencyBuckets[route];
 		}
-		for (const fn of oldQueueIdentify) {
-			this.shardManager.identifyBucket.enqueue(fn);
+		for (let i = 0; i < gateway.session_start_limit.max_concurrency; i++) {
+			this.shardManager.concurrencyBuckets[i] = new LocalBucket(1, 5000);
 		}
 		return gateway.shards;
 	}

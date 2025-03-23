@@ -26,7 +26,6 @@ export type IClientOptions = {
 	 * The total number of shards expected across all clusters.
 	 */
 	totalShards?: number;
-	reconnect?: boolean;
 	initialPresence?: GatewayPresenceUpdateData;
 	intents?: IntentResolvable;
 	snowtransferInstance?: SnowTransfer;

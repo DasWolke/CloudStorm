@@ -118,21 +118,25 @@ class BetterWs extends EventEmitter<BWSEvents> {
 		});
 		req.end();
 		this.emit("debug", "Socket sending request to upgrade");
+		const destroyReq = () => {
+			req.destroy();
+			if (req.socket && !req.socket.destroyed) req.socket.destroy();
+			this._internal.closePromise = this._socket = null; // just in case these are set, unset them so the `status` is 4 = closed
+		}
 		return eventSwitch(req, {
 			upgrade: (res: http.IncomingMessage, socket: Socket) => {
 				try {
 					this._onUpgrade(key, res, socket);
 				} catch (e) {
-					req.destroy();
+					destroyReq();
+					throw e;
 				}
 			},
 			error: e => {
 				throw e;
 			},
 			response: (res: http.ServerResponse) => {
-				req.destroy();
-				if (req.socket && !req.socket.destroyed) req.socket.destroy();
-				this._internal.closePromise = this._socket = null; // just in case these are set, unset them so the `status` is 4 = closed
+				destroyReq();
 				throw new Error(`Expected HTTP 101 Upgrade, but got ${res.statusCode} ${res.statusMessage}`);
 			}
 		}).finally(() => {

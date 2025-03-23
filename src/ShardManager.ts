@@ -20,11 +20,11 @@ class ShardManager {
 	/** The options used by the client */
 	public options: ShardManager["client"]["options"];
 	/** A Record of shards keyed by their ID */
-	public shards: { [id: number]: Shard } = {};
+	public shards: Record<string, Shard> = {};
 	/** The bucket used to identify a certain number of shards within a day. */
 	public identifyBucket = new LocalBucket(1000, 1000 * 60 * 60 * 24);
-	/** The bucket used to identify x number of shards within 5 second intervals. Larger bots benefit from this, but doesn't change how many times per day any shards can identify. */
-	public concurrencyBucket: LocalBucket | null = null;
+	/** The buckets used to identify x number of shards within 5 second intervals. Larger bots benefit from this, but doesn't change how many times per day any shards can identify. */
+	public concurrencyBuckets: Record<string, LocalBucket> = {};
 
 	/**
 	 * Create a new ShardManager.
@@ -38,7 +38,7 @@ class ShardManager {
 	 * @since 0.1.4
 	 */
 	public spawn(): void {
-		if (!this.concurrencyBucket) throw new Error("Trying to spawn shards without calling Client.connect()");
+		if (!Object.keys(this.concurrencyBuckets).length) throw new Error("Trying to spawn shards without calling Client.connect()");
 		for (const id of (this.options.shards === "auto" ? Array(this.options.totalShards).fill(0).map((_, index) => index) : this.options.shards ?? [0])) {
 			this.client.emit("debug", `Spawned shard ${id}`);
 			this.shards[id] = new Shard(id, this.client);
@@ -70,11 +70,15 @@ class ShardManager {
 			this._checkReady();
 		});
 		shard.on("queueIdentify", (shardId) => {
-			if (!this.shards[shardId]) return this.client.emit("debug", `Received a queueIdentify event for shard ${shardId} but it does not exist. Was it removed?`);
+			const max_concurrency = Object.keys(this.concurrencyBuckets!).length;
+			const concurrencyRoute = shardId % max_concurrency;
+			const bkt = this.concurrencyBuckets[concurrencyRoute];
+			if (!bkt) return this.client.emit("error", `Received a queueIdentify event for shard ${shardId} and a concurrency route of ${concurrencyRoute} with a max_concurrency of ${max_concurrency}, but there was no bucket with that route internally.`);
 			this.client.emit("debug", `Shard ${shardId} is ready to identify`);
-			if (shard.connector.reconnecting) return shard.connector.resume();
-			this.concurrencyBucket?.enqueue(() => {
-				this.identifyBucket.enqueue(() => this.shards[shardId].connector.identify());
+			this.identifyBucket.enqueue(() => {
+				bkt.enqueue(() => {
+					shard.connector.identify();
+				});
 			});
 		});
 		shard.on("disconnect", (code, reason, gracefulClose) => {
