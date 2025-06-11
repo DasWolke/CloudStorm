@@ -11,6 +11,13 @@ type Transition = {
 	onTransition?: Array<(...args: any[]) => unknown>;
 }
 
+type History = {
+	from: string;
+	event: string;
+	to: string;
+	time: number;
+}
+
 interface StateMachineEvents {
 	enter: [string];
 }
@@ -19,6 +26,7 @@ class StateMachine extends EventEmitter<StateMachineEvents> {
 	public readonly states = new Map<string, State>();
 	private editable = true;
 	private readonly deferredTransitionCreators: Array<() => unknown> = [];
+	private history: Array<History> = [];
 
 	public constructor(public currentStateName: string) {
 		super()
@@ -100,6 +108,9 @@ class StateMachine extends EventEmitter<StateMachineEvents> {
 		const transition = currentState.transitions.get(event);
 		if (!transition) throw new Error(`undefined transition: ${this.currentStateName} -> ${event} -> ?`);
 
+		this.history.push({ from: this.currentStateName, event, to: transition.destination, time: Date.now() })
+		if (this.history.length > 20) this.history.shift()
+
 		// Leave state
 		for (const cb of this.states.get(this.currentStateName)!.onLeave) {
 			cb(event);
@@ -126,6 +137,20 @@ class StateMachine extends EventEmitter<StateMachineEvents> {
 		this.once("enter", () => {
 			clearTimeout(timer);
 		});
+	}
+
+	public debug(): void {
+		console.table(this.history.map(h => ({
+			"At": new Date(h.time),
+			"From -->": h.from,
+			"-- Event -->": h.event,
+			"--> To": h.to
+		})).concat({
+			"At": new Date(),
+			"From -->": this.currentStateName,
+			"-- Event -->": "(debug)",
+			"--> To": ""
+		}))
 	}
 }
 
