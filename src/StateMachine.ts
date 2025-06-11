@@ -29,11 +29,11 @@ class StateMachine extends EventEmitter<StateMachineEvents> {
 		})
 	}
 
-	private guardEditable() {
+	public guardEditable() {
 		if (!this.editable) throw new Error("tried to edit state machine after machine has been frozen");
 	}
 
-	private guardNotEditable() {
+	public guardNotEditable() {
 		if (this.editable) throw new Error("tried to do transition before machine has been frozen");
 	}
 
@@ -113,7 +113,7 @@ class StateMachine extends EventEmitter<StateMachineEvents> {
 
 		// Enter state
 		this.emit("enter", this.currentStateName)
-		for (const cb of this.states.get(this.currentStateName)!.onLeave) {
+		for (const cb of this.states.get(this.currentStateName)!.onEnter) {
 			cb(event);
 		}
 	}

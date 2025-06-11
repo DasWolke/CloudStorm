@@ -19,6 +19,7 @@ import type {
 } from "./Types";
 
 import StateMachine = require("./StateMachine");
+import stateMachineGraph = require("./StateMachineGraph");
 
 /**
  * Call with an emitter and an object of callbacks, and the first event to be emitted will call the callback.
@@ -208,6 +209,9 @@ class BetterWs extends EventEmitter<BWSEvents> {
 							this.emit("debug", "Server didn't respond for a full close in time");
 						}
 					]
+				}],
+				["disconnect", {
+					destination: "disconnected"
 				}]
 			])
 		})
@@ -235,6 +239,10 @@ class BetterWs extends EventEmitter<BWSEvents> {
 		this.sm.defineUniversalTransition("error", "disconnected");
 
 		this.sm.freeze();
+
+		if (process.argv.includes(`--state-machine-graph-betterws`)) {
+			console.log(stateMachineGraph.graph(this.sm));
+		}
 	}
 
 	/**
