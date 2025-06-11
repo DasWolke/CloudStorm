@@ -64,6 +64,8 @@ class BetterWs extends EventEmitter<BWSEvents> {
 	/** A zlib Inflate instance if messages sent/received are going to be compressed. Auto created on connect. */
 	private _zlib: Inflate | null = null;
 	public sm = new StateMachine("disconnected");
+	/** Stores when the last connection attempt was made, in order to limit reconnection loops. */
+	private lastConnectAttempt = 0;
 
 	/**
 	 * Creates a new lightweight WebSocket.
@@ -75,6 +77,24 @@ class BetterWs extends EventEmitter<BWSEvents> {
 
 		this.encoding = options.encoding ?? "other";
 		this.compress = options.compress ?? false;
+
+		this.sm.defineState("connect_wait", {
+			onEnter: [
+				() => {
+					this.sm.doTransitionLater("connect_allowed", this.lastConnectAttempt - Date.now() + 10e3)
+				}
+			],
+			onLeave: [
+				() => {
+					this.lastConnectAttempt = Date.now()
+				}
+			],
+			transitions: new Map([
+				["connect_allowed", {
+					destination: "connecting"
+				}]
+			])
+		})
 
 		this.sm.defineState("connecting", {
 			onEnter: [
@@ -232,7 +252,7 @@ class BetterWs extends EventEmitter<BWSEvents> {
 			],
 			onLeave: [],
 			transitions: new Map([
-				["user_connect", { destination: "connecting" }]
+				["user_connect", { destination: "connect_wait" }]
 			])
 		})
 
