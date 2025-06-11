@@ -1,26 +1,27 @@
 {
   "name": "cloudstorm",
-  "version": "0.13.3",
+  "version": "0.14.0",
   "description": "Minimalistic Discord Gateway library",
   "main": "./dist/index.js",
   "engines": {
-    "node": ">=16.15.0"
+    "node": ">=22.0.0"
   },
   "types": "./dist/index.d.ts",
   "scripts": {
-    "build:src": "tsup src/index.ts --clean --dts --sourcemap --format cjs --target node16 --minify-whitespace --minify-syntax --treeshake && node ./sourceMapPostProcess.js",
+    "build:src": "tsup src/index.ts --clean --dts --sourcemap --format cjs --target node22 --minify-whitespace --minify-syntax --treeshake && node ./sourceMapPostProcess.js",
     "build:docs": "typedoc --name CloudStorm --excludeExternals --sort static-first --sort alphabetical"
   },
   "author": "wolke <wolke@weeb.sh>",
   "license": "MIT",
   "dependencies": {
-    "discord-api-types": "^0.38.8",
+    "denque": "^2.1.0",
+    "discord-api-types": "^0.381",
     "snowtransfer": "^0.14.2"
   },
   "devDependencies": {
-    "@types/node": "22.15.29",
-    "@typescript-eslint/eslint-plugin": "^8.33.0",
-    "@typescript-eslint/parser": "^8.33.0",
+    "@types/node": "^22.15.31",
+    "@typescript-eslint/eslint-plugin": "^8.3.0",
+    "@typescript-eslint/paser": "^8.34.0",
     "eslint": "^9.28.0",
     "tsup": "^8.5.0",
     "typedoc": "^0.28.5",

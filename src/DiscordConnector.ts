@@ -46,8 +46,6 @@ const disconnectMessages = {
 	4001: "You sent an invalid opcode or invalid payload for an opcode."
 };
 
-const wsStatusTypes = ["Whatever 0 is. Report if you see this", "connected", "connecting", "closing", "closed"];
-
 /**
  * Class used for acting based on received events.
  *
@@ -90,8 +88,6 @@ class DiscordConnector extends EventEmitter<ConnectorEvents> {
 
 	/** If this connector is waiting to be fully closed */
 	private _closing = false;
-	/** If the disconnect method on this class was called and the connect method hasn't been called yet */
-	private _closeCalled = false;
 	/** A Timeout that, when triggered, closes the connection because op HELLO hasn't been received and may never be received */
 	private _openToHeartbeatTimeout: NodeJS.Timeout | null = null;
 	/** A Timeout that, when triggered, sends the first heartbeat */
@@ -135,15 +131,9 @@ class DiscordConnector extends EventEmitter<ConnectorEvents> {
 	 */
 	public async connect(): Promise<void> {
 		this._closing = false;
-		this._closeCalled = false;
 		this.client.emit("debug", `Shard ${this.id} connecting to gateway`);
 		// The address should already be updated if resuming/identifying
-		return this.betterWs.connect()
-			.catch(() => {
-				setTimeout(() => {
-					if (!this._closeCalled) this.connect();
-				}, 5000);
-			});
+		return this.betterWs.connect();
 	}
 
 	/**
@@ -152,7 +142,6 @@ class DiscordConnector extends EventEmitter<ConnectorEvents> {
 	 */
 	public async disconnect(): Promise<void> {
 		this._closing = true;
-		this._closeCalled = true;
 		this.wsBucket.queue.setBlocked(true);
 		this.presenceBucket.queue.setBlocked(true);
 		return this.betterWs.close(1000, "Disconnected by User");
@@ -275,8 +264,8 @@ class DiscordConnector extends EventEmitter<ConnectorEvents> {
 	 * @since 0.1.4
 	 */
 	public async identify(): Promise<void> {
-		if (this.betterWs.status !== 1) {
-			this.client.emit("error", `Shard ${this.id} was attempting to identify when the ws was not open. Was ${wsStatusTypes[this.betterWs.status]}`);
+		if (this.betterWs.sm.currentStateName !== "connected") {
+			this.client.emit("error", `Shard ${this.id} was attempting to identify when the ws was not open. Current state: ${this.betterWs.sm.currentStateName}`);
 			return this._reconnect(true);
 		}
 		this.client.emit("debug", `Shard ${this.id} is identifying`);
@@ -308,8 +297,8 @@ class DiscordConnector extends EventEmitter<ConnectorEvents> {
 	 * @since 0.1.4
 	 */
 	public async resume(): Promise<void> {
-		if (this.betterWs.status !== 1) {
-			this.client.emit("error", `Shard ${this.id} was attempting to resume when the ws was not open. Was ${wsStatusTypes[this.betterWs.status]}`);
+		if (this.betterWs.sm.currentStateName !== "connected") {
+			this.client.emit("error", `Shard ${this.id} was attempting to resume when the ws was not open. Was ${this.betterWs.sm.currentStateName}`);
 			return this._reconnect(true);
 		}
 		this.client.emit("debug", `Shard ${this.id} is resuming`);
@@ -328,8 +317,8 @@ class DiscordConnector extends EventEmitter<ConnectorEvents> {
 	 * @since 0.1.4
 	 */
 	private heartbeat(): void {
-		if (this.betterWs.status !== 1) {
-			this.client.emit("error", `Shard ${this.id} was attempting to heartbeat when the ws was not open. Was ${wsStatusTypes[this.betterWs.status]}`);
+		if (this.betterWs.sm.currentStateName !== "connected") {
+			this.client.emit("error", `Shard ${this.id} was attempting to heartbeat when the ws was not open. Was ${this.betterWs.sm.currentStateName}`);
 			return void this._reconnect(true);
 		}
 		this.betterWs.sendMessage({ op: OP.HEARTBEAT, d: this.seq === 0 ? null : this.seq });
@@ -474,7 +463,7 @@ class DiscordConnector extends EventEmitter<ConnectorEvents> {
 		if (data.activities) {
 			for (const activity of data.activities) {
 				const index = data.activities.indexOf(activity);
-				if (activity.type === undefined) activity.type = activity.url ? 1 : 0;
+				activity.type ??= activity.url ? 1 : 0;
 				if (!activity.name) {
 					if (activity.state && activity.type === 4) activity.name = "Custom Status"; // Discord requires name to not be empty even on custom status
 					else data.activities.splice(index, 1);

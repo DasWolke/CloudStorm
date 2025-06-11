@@ -18,6 +18,8 @@ import type {
 	IClientWSOptions
 } from "./Types";
 
+import StateMachine = require("./StateMachine");
+
 /**
  * Call with an emitter and an object of callbacks, and the first event to be emitted will call the callback.
  * If the callback returns a promise, waits for the promise to resolve or reject. eventSwitch will resolve or reject with the same value.
@@ -50,25 +52,17 @@ class BetterWs extends EventEmitter<BWSEvents> {
 
 	/** The raw net.Socket retreived from upgrading the connection or null if not upgraded/closed. */
 	private _socket: Socket | null = null;
-	/** Internal properties that need a funny way to be referenced. */
-	public _internal: {
-		/** A promise that resolves when the connection is fully closed or null if not closing the connection if any. */
-		closePromise: Promise<void> | null;
-		/** A timer when the socket is half closing where the server MUST close it OR ELSE */
-		closeTimer: NodeJS.Timeout | null,
-		/** A zlib Inflate instance if messages sent/received are going to be compressed. Auto created on connect. */
-		zlib: Inflate | null;
-	} = {
-			closePromise: null,
-			closeTimer: null,
-			zlib: null
-		};
 	/** If a request is going through to initiate a WebSocket connection and hasn't been upgraded by the server yet. */
-	private _connecting = false;
 	/** Code received from frame op 8 */
 	private _lastCloseCode: number | null = null;
 	/** Reason received from frame op 8 */
 	private _lastCloseReason: string | null = null;
+	/** A promise that resolves when the connection is fully closed or null if not closing the connection if any. */
+	private _closePromise: Promise<void> | null = null;
+	private _closeResolver: ((value: void | PromiseLike<void>) => void) | null = null;
+	/** A zlib Inflate instance if messages sent/received are going to be compressed. Auto created on connect. */
+	private _zlib: Inflate | null = null;
+	public sm = new StateMachine("disconnected");
 
 	/**
 	 * Creates a new lightweight WebSocket.
@@ -80,100 +74,174 @@ class BetterWs extends EventEmitter<BWSEvents> {
 
 		this.encoding = options.encoding ?? "other";
 		this.compress = options.compress ?? false;
-	}
 
-	/**
-	 * The state this WebSocket is in. 1 is connected, 2 is connecting, 3 is closing, and 4 is closed.
-	 */
-	public get status(): 1 | 2 | 3 | 4 {
-		const internal = this._internal;
-		if (this._connecting) return 2;
-		if (internal.closePromise) return 3; // closing
-		if (!this._socket) return 4; // closed
-		return 1; // connected
-	}
-
-	/**
-	 * Initiates a WebSocket connection to the server.
-	 * @since 0.4.1
-	 */
-	public connect(): Promise<void> {
-		if (this._socket || this._connecting) return Promise.resolve(void 0);
-		this._connecting = true;
-		const key = randomBytes(16).toString("base64");
-		const url = new URL(this.address);
-		const useHTTPS = (url.protocol === "https:" || url.protocol === "wss:") || url.port === "443";
-		const port = url.port || (useHTTPS ? "443" : "80");
-		const req = (useHTTPS ? https : http).request({
-			hostname: url.hostname,
-			path: `${url.pathname}${url.search}`,
-			port: port,
-			headers: {
-				"Connection": "Upgrade",
-				"Upgrade": "websocket",
-				"Sec-WebSocket-Key": key,
-				"Sec-WebSocket-Version": "13",
-				...this.options.headers
-			}
-		});
-		req.end();
-		this.emit("debug", "Socket sending request to upgrade");
-		const destroyReq = () => {
-			req.destroy();
-			if (req.socket && !req.socket.destroyed) req.socket.destroy();
-			this._internal.closePromise = this._socket = null; // just in case these are set, unset them so the `status` is 4 = closed
-		}
-		return eventSwitch(req, {
-			upgrade: (res: http.IncomingMessage, socket: Socket) => {
-				try {
-					this._onUpgrade(key, res, socket);
-				} catch (e) {
-					destroyReq();
-					throw e;
+		this.sm.defineState("connecting", {
+			onEnter: [
+				() => {
+					const { req, key } = createReq(this.address, this.options);
+					this.emit("debug", "Socket sending request to upgrade");
+					return eventSwitch(req, {
+						upgrade: (res: http.IncomingMessage, socket: Socket) => {
+							try {
+								this.sm.doTransition("upgrade", key, res, socket);
+							} catch (e) {
+								req.destroy();
+								throw e;
+							}
+						},
+						error: e => {
+							throw e;
+						},
+						response: (res: http.ServerResponse) => {
+							req.destroy();
+							throw new Error(`Expected HTTP 101 Upgrade, but got ${res.statusCode} ${res.statusMessage}`);
+						}
+					}).catch(error => {
+						this.sm.doTransition("error", error);
+					});
 				}
-			},
-			error: e => {
-				throw e;
-			},
-			response: (res: http.ServerResponse) => {
-				destroyReq();
-				throw new Error(`Expected HTTP 101 Upgrade, but got ${res.statusCode} ${res.statusMessage}`);
-			}
-		}).finally(() => {
-			this._connecting = false;
+			],
+			onLeave: [],
+			transitions: new Map([
+				["upgrade", {
+					destination: "upgrading",
+					onTransition: [
+						/**
+						 * Handler for when requests from connect are upgraded to WebSockets.
+						 * @param key The sec key from connect.
+						 * @param req The HTTP request from connect.
+						 * @param resolve Promise resolver from connect.
+						 * @param reject Promise rejector from connect.
+						 * @param res The HTTP response from the server from connect.
+						 * @param socket The raw socket from upgrading the request from connect.
+						 */
+						(key: string, res: http.IncomingMessage, socket: Socket) => {
+							const hash = createHash("sha1").update(key + "258EAFA5-E914-47DA-95CA-C5AB0DC85B11").digest("base64");
+							const accept = res.headers["sec-websocket-accept"];
+							if (hash !== accept) {
+								socket.end(() => {
+									this.emit("error", `Failed websocket-key validation: expected: ${hash} | received: ${accept}`);
+								});
+								return this.sm.doTransition("error");
+							}
+							socket.on("error", () => this.sm.doTransition("error"));
+							socket.on("close", () => this.sm.doTransition("disconnect"));
+							socket.on("readable", this._onReadable.bind(this));
+							this._socket = socket;
+							if (this.compress) {
+								const z = createInflate();
+								// @ts-ignore
+								z._c = z.close; z._h = z._handle; z._hc = z._handle.close; z._v = () => void 0;
+								this._zlib = z;
+							}
+							this.emit("ws_open");
+							this.sm.doTransition("ws_open");
+						}
+					]
+				}]
+			])
 		});
+
+		this.sm.defineState("upgrading", {
+			onEnter: [],
+			onLeave: [],
+			transitions: new Map([
+				["ws_open", { destination: "connected" }]
+			])
+		});
+
+		this.sm.defineState("connected", {
+			onEnter: [],
+			onLeave: [],
+			transitions: new Map([
+				["disconnect", { destination: "disconnected" }],
+				["user_close", {
+					destination: "half_close",
+					onTransition: [
+						(code: number, reason?: string) => {
+							this.emit("debug", `User requested socket close`);
+
+							// Ask Discord to disconnect us
+							const from = Buffer.from([code >> 8, code & 255]);
+							this._write(reason ? Buffer.concat([from, Buffer.from(reason)]) : from, 8);
+						}
+					]
+				}],
+				["error", {
+					destination: "half_close",
+					onTransition: [
+						(error) => {
+							this.emit("error", util.inspect(error, true, 1, false));
+
+							// Ask Discord to disconnect us
+							this._write(Buffer.allocUnsafe(0), 8);
+						}
+					]
+				}]
+			])
+		});
+
+		this.sm.defineState("half_close", {
+			onEnter: [
+				() => {
+					this.sm.doTransitionLater("close_no_response", 5000);
+					const { promise, resolve } = Promise.withResolvers<void>();
+					this._closePromise = promise;
+					this._closeResolver = resolve;
+					return this._closePromise;
+				}
+			],
+			onLeave: [],
+			transitions: new Map([
+				["user_close", {
+					destination: "half_close",
+					onTransition: [
+						() => {
+							return this._closePromise; // this will exist because it was assigned in half-close, the state we are already in
+						}
+					]
+				}],
+				["close_no_response", {
+					destination: "disconnected",
+					onTransition: [
+						() => {
+							this.emit("debug", "Server didn't respond for a full close in time");
+						}
+					]
+				}]
+			])
+		})
+
+		this.sm.defineState("disconnected", {
+			onEnter: [
+				() => {
+					if (this._closeResolver) this._closeResolver();
+					if (this._zlib) {
+						this._zlib.close();
+						this._zlib = null;
+					}
+					this.emit("ws_close", this._lastCloseCode ?? 1006, this._lastCloseReason ?? "Abnormal Closure");
+					this._lastCloseCode = null;
+					this._lastCloseReason = null;
+					this._socket?.removeAllListeners()
+				}
+			],
+			onLeave: [],
+			transitions: new Map([
+				["user_connect", { destination: "connecting" }]
+			])
+		})
+
+		this.sm.defineUniversalTransition("error", "disconnected");
+
+		this.sm.freeze();
 	}
 
 	/**
-	 * Disconnects from the server.
-	 * @since 0.1.4
-	 * @param code The close code.
-	 * @param reason The reason for closing if any.
-	 * @returns A Promise that resolves when the connection is fully closed.
+	 * Connects to the server.
 	 */
-	public async close(code: number, reason?: string): Promise<void> {
-		this.emit("debug", `Socket attempting to close`);
-		const internal = this._internal;
-		if (internal.closePromise) return internal.closePromise;
-		if (!this._socket) return Promise.resolve(void 0);
-		let resolver: ((value: unknown) => void) | undefined;
-		const promise = new Promise(resolve => {
-			resolver = resolve;
-			const from = Buffer.from([code >> 8, code & 255]);
-			this._write(reason ? Buffer.concat([from, Buffer.from(reason)]) : from, 8);
-			this.emit("debug", "Socket wrote fin packet");
-		}).then(() => {
-			internal.closePromise = null;
-		});
-		// @ts-ignore
-		promise.resolve = resolver;
-		internal.closePromise = promise;
-		if (internal.closeTimer) clearTimeout(internal.closeTimer);
-		internal.closeTimer = setTimeout(() => {
-			this.emit("debug", "Server didn't respond for a full close in time");
-			this._onClose();
-		}, 5000); // Half close and set a hard time frame for the server to respond.
-		return promise;
+	public connect(): void {
+		this.sm.doTransition("user_connect");
 	}
 
 	/**
@@ -190,6 +258,18 @@ class BetterWs extends EventEmitter<BWSEvents> {
 	}
 
 	/**
+	 * Disconnects from the server.
+	 * This can only be called when connected (returns a promise) or half-close (returns the same promise)
+	 * @since 0.1.4
+	 * @param code The close code.
+	 * @param reason The reason for closing if any.
+	 * @returns A Promise that resolves when the connection is fully closed.
+	 */
+	public async close(code: number, reason?: string): Promise<void> {
+		this.sm.doTransition("user_close", code, reason);
+	}
+
+	/**
 	 * Method to raw write messages to the server.
 	 * @since 0.4.1
 	 * @param packet Buffer containing the message to send.
@@ -197,7 +277,12 @@ class BetterWs extends EventEmitter<BWSEvents> {
 	 */
 	private _write(packet: Buffer, opcode: number): void {
 		const socket = this._socket;
-		if (!socket?.writable) return;
+		if (!socket?.writable) {
+			const error = new Error("tried to write to a missing, closed, or not-writable socket");
+			// @ts-ignore - you can add extra properties to error which will be printed for debugging
+			error.socket = socket
+			throw error
+		}
 		const length = packet.length;
 		let frame: Buffer | undefined;
 		if (length < 126) {
@@ -220,80 +305,8 @@ class BetterWs extends EventEmitter<BWSEvents> {
 	}
 
 	/**
-	 * Handler for when requests from connect are upgraded to WebSockets.
-	 * @param key The sec key from connect.
-	 * @param req The HTTP request from connect.
-	 * @param resolve Promise resolver from connect.
-	 * @param reject Promise rejector from connect.
-	 * @param res The HTTP response from the server from connect.
-	 * @param socket The raw socket from upgrading the request from connect.
-	 */
-	private _onUpgrade(key: string, res: http.IncomingMessage, socket: Socket): void {
-		const hash = createHash("sha1").update(key + "258EAFA5-E914-47DA-95CA-C5AB0DC85B11").digest("base64");
-		const accept = res.headers["sec-websocket-accept"];
-		if (hash !== accept) {
-			socket.end(() => {
-				this.emit("error", "Failed websocket-key validation");
-			});
-			throw new Error(`Invalid Sec-Websocket-Accept | expected: ${hash} | received: ${accept}`);
-		}
-		socket.once("error", this._onError.bind(this)); // the conection is closed after 1 error
-		socket.once("close", this._onClose.bind(this)); // socket gets de-referenced from this on close
-		socket.on("readable", this._onReadable.bind(this));
-		this._socket = socket;
-		if (this.compress) {
-			const z = createInflate();
-			// @ts-ignore
-			z._c = z.close; z._h = z._handle; z._hc = z._handle.close; z._v = () => void 0;
-			this._internal.zlib = z;
-		}
-		this.emit("ws_open");
-	}
-
-	/**
-	 * Handler for when the raw socket to the server encounters an error.
-	 * @since 0.4.1
-	 * @param error What happened.
-	 */
-	private _onError(error: Error): void {
-		if (!this._socket) return;
-		this.emit("error", util.inspect(error, true, 1, false));
-		this._write(Buffer.allocUnsafe(0), 8);
-	}
-
-	/**
-	 * Handler for when the raw socket is fully closed and cleans up this WebSocket.
-	 * @since 0.4.1
-	 */
-	private _onClose(): void {
-		if (this._internal.closeTimer) clearTimeout(this._internal.closeTimer);
-		this._internal.closeTimer = null;
-		const socket = this._socket;
-		const internal = this._internal;
-		this.emit("debug", "Socket _onClose called");
-		if (!socket) return;
-		socket.removeListener("data", this._onReadable);
-		socket.removeListener("error", this._onError);
-		this._socket = null;
-
-		if (internal.closePromise) {
-			// @ts-expect-error Shut
-			internal.closePromise.resolve(void 0);
-			this.emit("debug", "Socket closePromise resolved");
-		} else this.emit("debug", "Socket didn't have a closePromise to resolve");
-
-		if (internal.zlib) {
-			internal.zlib.close();
-			internal.zlib = null;
-		}
-		this.emit("ws_close", this._lastCloseCode ?? 1006, this._lastCloseReason ?? "Abnormal Closure");
-		this._lastCloseCode = null;
-		this._lastCloseReason = null;
-	}
-
-	/**
 	 * Handler for when there is data in the socket's Buffer to read.
-	 * @since 0.4.1
+	 * @since 0.3.1
 	 */
 	private _onReadable(): void {
 		const socket = this._socket;
@@ -322,7 +335,6 @@ class BetterWs extends EventEmitter<BWSEvents> {
 	 * @param message Buffer of data to transform/read.
 	 */
 	private _processFrame(opcode: number, message: Buffer): void {
-		const internal = this._internal;
 		switch (opcode) {
 		case 1: {
 			let packet: any;
@@ -334,9 +346,9 @@ class BetterWs extends EventEmitter<BWSEvents> {
 		case 2: {
 			let packet;
 			if (this.compress) {
-				const z = internal.zlib;
 				let error = null;
 				let data = null;
+				const z = this._zlib!;
 				// @ts-ignore
 				z.close = z._handle.close = z._v;
 				try {
@@ -357,7 +369,7 @@ class BetterWs extends EventEmitter<BWSEvents> {
 				z._events.error = void 0;
 				// @ts-ignore
 				z._eventCount--;
-				z!.removeAllListeners("error");
+				z.removeAllListeners("error");
 				if (error) {
 					this.emit("error", "Zlib error processing chunk");
 					this._write(Buffer.allocUnsafe(0), 8);
@@ -388,6 +400,27 @@ class BetterWs extends EventEmitter<BWSEvents> {
 		}
 		}
 	}
+}
+
+function createReq(address: string, options: BetterWs["options"]): { req: http.ClientRequest, key: string } {
+	const key = randomBytes(16).toString("base64");
+	const url = new URL(address);
+	const useHTTPS = (url.protocol === "https:" || url.protocol === "wss:") || url.port === "443";
+	const port = url.port || (useHTTPS ? "443" : "80");
+	const req = (useHTTPS ? https : http).request({
+		hostname: url.hostname,
+		path: `${url.pathname}${url.search}`,
+		port: port,
+		headers: {
+			"Connection": "Upgrade",
+			"Upgrade": "websocket",
+			"Sec-WebSocket-Key": key,
+			"Sec-WebSocket-Version": "13",
+			...options.headers
+		}
+	});
+	req.end();
+	return { req, key };
 }
 
 function readRange(socket: Socket, index: number, bytes: number): number {
@@ -493,7 +526,7 @@ function readETF(data: Buffer, start: number): Record<any, any> | null | undefin
 		}
 		case 110: {
 			// @ts-ignore
-			if (!view) view = new DataView(data.buffer, data.offset, data.byteLength);
+			view ??= new DataView(data.buffer, data.offset, data.byteLength);
 			const length = data[x++];
 			const sign = data[x++];
 			let left = length;
