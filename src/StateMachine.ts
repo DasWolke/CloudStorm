@@ -104,28 +104,44 @@ class StateMachine extends EventEmitter<StateMachineEvents> {
 
 	public doTransition(event: string, ...args: any[]): void {
 		this.guardNotEditable();
+		const from = this.currentStateName;
 		const currentState = this.states.get(this.currentStateName)!;
 		const transition = currentState.transitions.get(event);
 		if (!transition) throw new Error(`undefined transition: ${this.currentStateName} -> ${event} -> ?`);
 
-		this.history.push({ from: this.currentStateName, event, to: transition.destination, time: Date.now() })
+		this.history.push({ from, event, to: transition.destination, time: Date.now() })
 		if (this.history.length > 20) this.history.shift()
 
 		// Leave state
 		for (const cb of this.states.get(this.currentStateName)!.onLeave) {
-			cb(event);
+			try {
+				cb(event);
+			} catch (e) {
+				this.debug();
+				throw new Error(`onLeave callback for state ${from} (during transition ${from} --${event}--> ${transition.destination})`, {cause: e});
+			}
 		}
 
 		// Do transition
 		this.currentStateName = transition.destination;
 		for (const cb of transition.onTransition ?? []) {
-			cb(...args);
+			try {
+				cb(...args);
+			} catch (e) {
+				this.debug();
+				throw new Error(`onTransition callback during ${from} --${event}--> ${transition.destination}`, {cause: e});
+			}
 		}
 
 		// Enter state
 		this.emit("enter", this.currentStateName)
 		for (const cb of this.states.get(this.currentStateName)!.onEnter) {
-			cb(event);
+			try {
+				cb(event);
+			} catch (e) {
+				this.debug();
+				throw new Error(`onEnter callback for state ${from} (during transition ${this.currentStateName} --${event}--> ${transition.destination})`, {cause: e});
+			}
 		}
 	}
 
