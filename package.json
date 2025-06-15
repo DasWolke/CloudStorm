@@ -14,7 +14,6 @@
   "author": "wolke <wolke@weeb.sh>",
   "license": "MIT",
   "dependencies": {
-    "denque": "^2.1.0",
     "discord-api-types": "^0.38.11",
     "snowtransfer": "^0.14.2"
   },
