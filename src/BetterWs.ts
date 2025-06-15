@@ -150,7 +150,7 @@ class BetterWs extends EventEmitter<BWSEvents> {
 								});
 								return this.sm.doTransition("error");
 							}
-							socket.on("error", () => this.sm.doTransition("error"));
+							socket.on("error", e => this.sm.doTransition("error", e));
 							socket.on("close", () => this.sm.doTransition("disconnect"));
 							socket.on("readable", this._onReadable.bind(this));
 							this._socket = socket;
@@ -311,10 +311,8 @@ class BetterWs extends EventEmitter<BWSEvents> {
 	private _write(packet: Buffer, opcode: number): void {
 		const socket = this._socket;
 		if (!socket?.writable) {
-			const error = new Error("tried to write to a missing, closed, or not-writable socket");
-			// @ts-ignore - you can add extra properties to error which will be printed for debugging
-			error.socket = socket
-			throw error
+			// Tried to write to a missing, closed, or not-writeable socket. Either way, this connection isn't recoverable, we need a new one.
+			return this.sm.doTransition("disconnect");
 		}
 		const length = packet.length;
 		let frame: Buffer | undefined;
