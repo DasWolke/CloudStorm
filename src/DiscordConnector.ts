@@ -298,7 +298,7 @@ class DiscordConnector extends EventEmitter<ConnectorEvents> {
 	 */
 	public async resume(): Promise<void> {
 		if (this.betterWs.sm.currentStateName !== "connected") {
-			this.client.emit("error", `Shard ${this.id} was attempting to resume when the ws was not open. Was ${this.betterWs.sm.currentStateName}`);
+			this.client.emit("error", `Shard ${this.id} was attempting to resume when the ws was not open. Current state: ${this.betterWs.sm.currentStateName}`);
 			return this._reconnect(true);
 		}
 		this.client.emit("debug", `Shard ${this.id} is resuming`);
@@ -318,7 +318,7 @@ class DiscordConnector extends EventEmitter<ConnectorEvents> {
 	 */
 	private heartbeat(): void {
 		if (this.betterWs.sm.currentStateName !== "connected") {
-			this.client.emit("error", `Shard ${this.id} was attempting to heartbeat when the ws was not open. Was ${this.betterWs.sm.currentStateName}`);
+			this.client.emit("error", `Shard ${this.id} was attempting to heartbeat when the ws was not open. Current state: ${this.betterWs.sm.currentStateName}`);
 			return void this._reconnect(true);
 		}
 		this.betterWs.sendMessage({ op: OP.HEARTBEAT, d: this.seq === 0 ? null : this.seq });

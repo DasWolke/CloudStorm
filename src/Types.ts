@@ -36,7 +36,8 @@ export type IClientWSOptions = {
 	compress?: boolean;
 	encoding?: "etf" | "json";
 	headers?: Record<string, any>;
-	bypassBuckets?: boolean
+	bypassBuckets?: boolean;
+	connectThrottle?: number;
 }
 
 export type BWSEvents = {

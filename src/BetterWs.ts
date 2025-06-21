@@ -19,6 +19,7 @@ import type {
 } from "./Types";
 
 import StateMachine = require("./StateMachine");
+import stateMachineGraph = require("./StateMachineGraph");
 
 /**
  * Call with an emitter and an object of callbacks, and the first event to be emitted will call the callback.
@@ -49,6 +50,10 @@ class BetterWs extends EventEmitter<BWSEvents> {
 	public encoding: "etf" | "json" | "other";
 	/** If the messages sent/received are compressed with zlib. */
 	public compress: boolean;
+	/** How much to delay repeated calls to `connect()`. */
+	public connectThrottle: number;
+	/** Tracks the state this WebSocket is in and what operations are allowed. */
+	public sm = new StateMachine("disconnected");
 
 	/** The raw net.Socket retreived from upgrading the connection or null if not upgraded/closed. */
 	private _socket: Socket | null = null;
@@ -62,7 +67,9 @@ class BetterWs extends EventEmitter<BWSEvents> {
 	private _closeResolver: ((value: void | PromiseLike<void>) => void) | null = null;
 	/** A zlib Inflate instance if messages sent/received are going to be compressed. Auto created on connect. */
 	private _zlib: Inflate | null = null;
-	public sm = new StateMachine("disconnected");
+	/** Stores when the last connection attempt was made, in order to limit reconnection loops. */
+	private lastConnectAttempt = 0;
+
 
 	/**
 	 * Creates a new lightweight WebSocket.
@@ -74,6 +81,25 @@ class BetterWs extends EventEmitter<BWSEvents> {
 
 		this.encoding = options.encoding ?? "other";
 		this.compress = options.compress ?? false;
+		this.connectThrottle = options.connectThrottle ?? 10e3;
+
+		this.sm.defineState("connect_wait", {
+			onEnter: [
+				() => {
+					this.sm.doTransitionLater("connect_allowed", this.lastConnectAttempt - Date.now() + this.connectThrottle)
+				}
+			],
+			onLeave: [
+				() => {
+					this.lastConnectAttempt = Date.now()
+				}
+			],
+			transitions: new Map([
+				["connect_allowed", {
+					destination: "connecting"
+				}]
+			])
+		})
 
 		this.sm.defineState("connecting", {
 			onEnter: [
@@ -124,7 +150,7 @@ class BetterWs extends EventEmitter<BWSEvents> {
 								});
 								return this.sm.doTransition("error");
 							}
-							socket.on("error", () => this.sm.doTransition("error"));
+							socket.on("error", e => this.sm.doTransition("error", e));
 							socket.on("close", () => this.sm.doTransition("disconnect"));
 							socket.on("readable", this._onReadable.bind(this));
 							this._socket = socket;
@@ -208,6 +234,9 @@ class BetterWs extends EventEmitter<BWSEvents> {
 							this.emit("debug", "Server didn't respond for a full close in time");
 						}
 					]
+				}],
+				["disconnect", {
+					destination: "disconnected"
 				}]
 			])
 		})
@@ -228,13 +257,17 @@ class BetterWs extends EventEmitter<BWSEvents> {
 			],
 			onLeave: [],
 			transitions: new Map([
-				["user_connect", { destination: "connecting" }]
+				["user_connect", { destination: "connect_wait" }]
 			])
 		})
 
 		this.sm.defineUniversalTransition("error", "disconnected");
 
 		this.sm.freeze();
+
+		if (process.argv.includes(`--state-machine-graph-betterws`)) {
+			console.log(stateMachineGraph.graph(this.sm));
+		}
 	}
 
 	/**
@@ -278,10 +311,8 @@ class BetterWs extends EventEmitter<BWSEvents> {
 	private _write(packet: Buffer, opcode: number): void {
 		const socket = this._socket;
 		if (!socket?.writable) {
-			const error = new Error("tried to write to a missing, closed, or not-writable socket");
-			// @ts-ignore - you can add extra properties to error which will be printed for debugging
-			error.socket = socket
-			throw error
+			// Tried to write to a missing, closed, or not-writeable socket. Either way, this connection isn't recoverable, we need a new one.
+			return this.sm.doTransition("disconnect");
 		}
 		const length = packet.length;
 		let frame: Buffer | undefined;

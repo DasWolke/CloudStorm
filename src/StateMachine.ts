@@ -11,6 +11,13 @@ type Transition = {
 	onTransition?: Array<(...args: any[]) => unknown>;
 }
 
+type History = {
+	from: string;
+	event: string;
+	to: string;
+	time: number;
+}
+
 interface StateMachineEvents {
 	enter: [string];
 }
@@ -19,6 +26,7 @@ class StateMachine extends EventEmitter<StateMachineEvents> {
 	public readonly states = new Map<string, State>();
 	private editable = true;
 	private readonly deferredTransitionCreators: Array<() => unknown> = [];
+	private history: Array<History> = [];
 
 	public constructor(public currentStateName: string) {
 		super()
@@ -29,11 +37,11 @@ class StateMachine extends EventEmitter<StateMachineEvents> {
 		})
 	}
 
-	private guardEditable() {
+	public guardEditable() {
 		if (!this.editable) throw new Error("tried to edit state machine after machine has been frozen");
 	}
 
-	private guardNotEditable() {
+	public guardNotEditable() {
 		if (this.editable) throw new Error("tried to do transition before machine has been frozen");
 	}
 
@@ -96,25 +104,44 @@ class StateMachine extends EventEmitter<StateMachineEvents> {
 
 	public doTransition(event: string, ...args: any[]): void {
 		this.guardNotEditable();
+		const from = this.currentStateName;
 		const currentState = this.states.get(this.currentStateName)!;
 		const transition = currentState.transitions.get(event);
 		if (!transition) throw new Error(`undefined transition: ${this.currentStateName} -> ${event} -> ?`);
 
+		this.history.push({ from, event, to: transition.destination, time: Date.now() })
+		if (this.history.length > 20) this.history.shift()
+
 		// Leave state
 		for (const cb of this.states.get(this.currentStateName)!.onLeave) {
-			cb(event);
+			try {
+				cb(event);
+			} catch (e) {
+				this.debug();
+				throw new Error(`onLeave callback for state ${from} (during transition ${from} --${event}--> ${transition.destination})`, {cause: e});
+			}
 		}
 
 		// Do transition
 		this.currentStateName = transition.destination;
 		for (const cb of transition.onTransition ?? []) {
-			cb(...args);
+			try {
+				cb(...args);
+			} catch (e) {
+				this.debug();
+				throw new Error(`onTransition callback during ${from} --${event}--> ${transition.destination}`, {cause: e});
+			}
 		}
 
 		// Enter state
 		this.emit("enter", this.currentStateName)
-		for (const cb of this.states.get(this.currentStateName)!.onLeave) {
-			cb(event);
+		for (const cb of this.states.get(this.currentStateName)!.onEnter) {
+			try {
+				cb(event);
+			} catch (e) {
+				this.debug();
+				throw new Error(`onEnter callback for state ${from} (during transition ${this.currentStateName} --${event}--> ${transition.destination})`, {cause: e});
+			}
 		}
 	}
 
@@ -126,6 +153,20 @@ class StateMachine extends EventEmitter<StateMachineEvents> {
 		this.once("enter", () => {
 			clearTimeout(timer);
 		});
+	}
+
+	public debug(): void {
+		console.table(this.history.map(h => ({
+			"At": new Date(h.time),
+			"From -->": h.from,
+			"-- Event -->": h.event,
+			"--> To": h.to
+		})).concat({
+			"At": new Date(),
+			"From -->": this.currentStateName,
+			"-- Event -->": "(debug)",
+			"--> To": ""
+		}))
 	}
 }
 

@@ -14,14 +14,13 @@
   "author": "wolke <wolke@weeb.sh>",
   "license": "MIT",
   "dependencies": {
-    "denque": "^2.1.0",
-    "discord-api-types": "^0.381",
+    "discord-api-types": "^0.38.11",
     "snowtransfer": "^0.14.2"
   },
   "devDependencies": {
     "@types/node": "^22.15.31",
     "@typescript-eslint/eslint-plugin": "^8.3.0",
-    "@typescript-eslint/paser": "^8.34.0",
+    "@typescript-eslint/parser": "^8.34.0",
     "eslint": "^9.28.0",
     "tsup": "^8.5.0",
     "typedoc": "^0.28.5",
