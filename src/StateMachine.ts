@@ -1,40 +1,24 @@
 import EventEmitter = require("events");
 
-type State = {
-	onEnter: Array<(event: string) => unknown>;
-	onLeave: Array<(event: string) => unknown>;
-	transitions: Map<string, Transition>;
-}
-
-type Transition = {
-	destination: string;
-	onTransition?: Array<(...args: any[]) => unknown>;
-}
-
-type History = {
-	from: string;
-	event: string;
-	to: string;
-	time: number;
-}
+import type { SMHistory, SMState, SMTransition } from "./Types";
 
 interface StateMachineEvents {
 	enter: [string];
 }
 
 class StateMachine extends EventEmitter<StateMachineEvents> {
-	public readonly states = new Map<string, State>();
+	public readonly states = new Map<string, SMState>();
 	private editable = true;
 	private readonly deferredTransitionCreators: Array<() => unknown> = [];
-	private history: Array<History> = [];
+	private readonly history: Array<SMHistory> = [];
 
 	public constructor(public currentStateName: string) {
-		super()
+		super();
 		this.deferredTransitionCreators.push(() => {
 			if (!this.states.has(currentStateName)) {
 				this.defineState(currentStateName);
 			}
-		})
+		});
 	}
 
 	public guardEditable() {
@@ -45,7 +29,7 @@ class StateMachine extends EventEmitter<StateMachineEvents> {
 		if (this.editable) throw new Error("tried to do transition before machine has been frozen");
 	}
 
-	public defineState(name: string, cbs: { onEnter: State["onEnter"], onLeave: State["onLeave"], transitions: Map<string, Transition> } = { onEnter: [], onLeave: [], transitions: new Map() }): this {
+	public defineState(name: string, cbs: { onEnter: SMState["onEnter"], onLeave: SMState["onLeave"], transitions: Map<string, SMTransition> } = { onEnter: [], onLeave: [], transitions: new Map() }): this {
 		this.guardEditable();
 		if (this.states.has(name)) throw new Error(`attempt to redefine state ${name}, please edit it instead`);
 		this.states.set(name, {
@@ -59,11 +43,11 @@ class StateMachine extends EventEmitter<StateMachineEvents> {
 	public defineTransition(from: string, event, to: string, cb?: (...args: any[]) => unknown): this {
 		this.guardEditable();
 		const state = this.states.get(from)!;
-		if (state.transitions.has(event)) throw new Error(`attempt to redefine transition ${from} --${event}--> *, please only create transitions once`)
-		const onTransition: Transition["onTransition"] = []
-		if (cb) onTransition.push(cb)
-		state.transitions.set(event, { destination: to, onTransition })
-		return this
+		if (state.transitions.has(event)) throw new Error(`attempt to redefine transition ${from} --${event}--> *, please only create transitions once`);
+		const onTransition: SMTransition["onTransition"] = [];
+		if (cb) onTransition.push(cb);
+		state.transitions.set(event, { destination: to, onTransition });
+		return this;
 	}
 
 	public defineUniversalTransition(event: string, to: string): this {
@@ -74,8 +58,8 @@ class StateMachine extends EventEmitter<StateMachineEvents> {
 					this.defineTransition(stateName, event, to);
 				}
 			}
-		})
-		return this
+		});
+		return this;
 	}
 
 	public freeze() {
@@ -96,7 +80,7 @@ class StateMachine extends EventEmitter<StateMachineEvents> {
 			}
 		}
 		if (problems.length) {
-			throw new Error(`Consistency problems in state machine: ${problems.join(";")}`)
+			throw new Error(`Consistency problems in state machine: ${problems.join(";")}`);
 		}
 
 		this.editable = false;
@@ -109,8 +93,8 @@ class StateMachine extends EventEmitter<StateMachineEvents> {
 		const transition = currentState.transitions.get(event);
 		if (!transition) throw new Error(`undefined transition: ${this.currentStateName} -> ${event} -> ?`);
 
-		this.history.push({ from, event, to: transition.destination, time: Date.now() })
-		if (this.history.length > 20) this.history.shift()
+		this.history.push({ from, event, to: transition.destination, time: Date.now() });
+		if (this.history.length > 20) this.history.shift();
 
 		// Leave state
 		for (const cb of this.states.get(this.currentStateName)!.onLeave) {
@@ -134,7 +118,7 @@ class StateMachine extends EventEmitter<StateMachineEvents> {
 		}
 
 		// Enter state
-		this.emit("enter", this.currentStateName)
+		this.emit("enter", this.currentStateName);
 		for (const cb of this.states.get(this.currentStateName)!.onEnter) {
 			try {
 				cb(event);
@@ -166,9 +150,9 @@ class StateMachine extends EventEmitter<StateMachineEvents> {
 			"From -->": this.currentStateName,
 			"-- Event -->": "(debug)",
 			"--> To": ""
-		}))
+		}));
 	}
 }
 
 
-export = StateMachine
+export = StateMachine;
