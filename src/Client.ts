@@ -49,7 +49,7 @@ class Client extends EventEmitter<ClientEvents> {
 				encoding: "json"
 			}
 		};
-		this._restClient = options.snowtransferInstance ? options.snowtransferInstance : new SnowTransfer(token);
+		this._restClient = options.snowtransferInstance ?? new SnowTransfer(token);
 		delete options.snowtransferInstance;
 		this.token = token.startsWith("Bot ") ? token.substring(4) : token;
 		if (options.ws) Object.assign(this.options.ws!, options.ws);

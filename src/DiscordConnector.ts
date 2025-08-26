@@ -85,6 +85,8 @@ class DiscordConnector extends EventEmitter<ConnectorEvents> {
 	public wsBucket = new LocalBucket(120, 60000);
 	/** The ratelimit bucket for how many presence update specific packets this ws can send within a time frame. Is still affected by the overall packet send bucket. */
 	public presenceBucket = new LocalBucket(5, 60000);
+	/** The ratelimit bucket for when requesting all guild members from a guild. Is still affected by the overall packet send bucket. */
+	public membersBucket = new LocalBucket(1, 30000);
 
 	/** If this connector is waiting to be fully closed */
 	private _closing = false;
@@ -123,6 +125,7 @@ class DiscordConnector extends EventEmitter<ConnectorEvents> {
 
 		this.wsBucket.queue.setBlocked(true);
 		this.presenceBucket.queue.setBlocked(true);
+		this.membersBucket.queue.setBlocked(true);
 	}
 
 	/**
@@ -144,6 +147,7 @@ class DiscordConnector extends EventEmitter<ConnectorEvents> {
 		this._closing = true;
 		this.wsBucket.queue.setBlocked(true);
 		this.presenceBucket.queue.setBlocked(true);
+		this.membersBucket.queue.setBlocked(true);
 		return this.betterWs.close(1000, "Disconnected by User");
 	}
 
@@ -359,6 +363,7 @@ class DiscordConnector extends EventEmitter<ConnectorEvents> {
 			this.emit("ready", message.t === "RESUMED");
 			this.wsBucket.queue.setBlocked(false);
 			this.presenceBucket.queue.setBlocked(false);
+			this.membersBucket.queue.setBlocked(false);
 			break;
 		default:
 			void 0;
@@ -434,7 +439,6 @@ class DiscordConnector extends EventEmitter<ConnectorEvents> {
 	 * @returns A Promise that resolves when the message passes the bucket queue(s).
 	 */
 	public async sendMessage(data: GatewaySendPayload): Promise<void> {
-		const presence = data.op === OP.PRESENCE_UPDATE;
 		const bypass = this.options.ws!.bypassBuckets;
 		return new Promise<void>(res => {
 			const sendMsg = () => {
@@ -445,7 +449,20 @@ class DiscordConnector extends EventEmitter<ConnectorEvents> {
 				if (bypass) fn();
 				else this.wsBucket.enqueue(fn);
 			};
-			if (presence && !bypass) this.presenceBucket.enqueue(sendMsg);
+			if (!bypass) {
+				switch (data.op) {
+					case OP.PRESENCE_UPDATE:
+						this.presenceBucket.enqueue(sendMsg);
+						break;
+					case OP.REQUEST_GUILD_MEMBERS:
+						if ("query" in data.d && data.d.query.length === 0 && data.d.limit === 0) this.membersBucket.enqueue(sendMsg);
+						else sendMsg();
+						break;
+					default:
+						sendMsg();
+						break;
+				}
+			}
 			else sendMsg();
 		});
 	}

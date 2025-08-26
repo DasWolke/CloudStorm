@@ -38,7 +38,7 @@ class ShardManager {
 	 * @since 0.1.4
 	 */
 	public spawn(): void {
-		if (!Object.keys(this.concurrencyBuckets).length) throw new Error("Trying to spawn shards without calling Client.connect()");
+		if (!Object.keys(this.concurrencyBuckets).length) throw new Error("Trying to spawn shards without calling Client.fetchConnectInfo()\nIf you intended to just let cloudstorm handle things for you, you should just use Client.connect() instead");
 		for (const id of (this.options.shards === "auto" ? Array(this.options.totalShards).fill(0).map((_, index) => index) : this.options.shards ?? [0])) {
 			this.client.emit("debug", `Spawned shard ${id}`);
 			this.shards[id] = new Shard(id, this.client);
