@@ -6,12 +6,20 @@ interface StateMachineEvents {
 	enter: [string];
 }
 
+/**
+ * Class used to define states code is expected to be in and transitions to other states and code to run during those transitions and states
+ * @since 0.14.0
+ */
 class StateMachine extends EventEmitter<StateMachineEvents> {
 	public readonly states = new Map<string, SMState>();
 	private editable = true;
 	private readonly deferredTransitionCreators: Array<() => unknown> = [];
 	private readonly history: Array<SMHistory> = [];
 
+	/**
+	 * Create a new StateMachine
+	 * @param currentStateName The state this state machine is currently in. When constructing the StateMachine, this is the entry state.
+	 */
 	public constructor(public currentStateName: string) {
 		super();
 		this.deferredTransitionCreators.push(() => {
@@ -21,14 +29,28 @@ class StateMachine extends EventEmitter<StateMachineEvents> {
 		});
 	}
 
+	/**
+	 * Helper function that throws an Error when something tries to edit the state machine after it has been frozen/finalized.
+	 * @since 0.14.0
+	 */
 	public guardEditable() {
 		if (!this.editable) throw new Error("tried to edit state machine after machine has been frozen");
 	}
 
+	/**
+	 * Helper function that throws an Error when something tries to use the state machine before it has been frozen/finalized.
+	 * @since 0.14.0
+	 */
 	public guardNotEditable() {
 		if (this.editable) throw new Error("tried to do transition before machine has been frozen");
 	}
 
+	/**
+	 * Define a state in the state machine.
+	 * @since 0.14.0
+	 * @param name The name of the state.
+	 * @param cbs Callbacks for points during transitions relating to this state as well as transitions to other states.
+	 */
 	public defineState(name: string, cbs: { onEnter: SMState["onEnter"], onLeave: SMState["onLeave"], transitions: Map<string, SMTransition> } = { onEnter: [], onLeave: [], transitions: new Map() }): this {
 		this.guardEditable();
 		if (this.states.has(name)) throw new Error(`attempt to redefine state ${name}, please edit it instead`);
@@ -40,7 +62,15 @@ class StateMachine extends EventEmitter<StateMachineEvents> {
 		return this;
 	}
 
-	public defineTransition(from: string, event, to: string, cb?: (...args: any[]) => unknown): this {
+	/**
+	 * Define a transition between 2 states in the state machine.
+	 * @since 0.14.0
+	 * @param from The name of the state this transition would come from.
+	 * @param event The event that can trigger this transition.
+	 * @param to The name of the state this transition would go to.
+	 * @param cb A callback to run when this transition occurs.
+	 */
+	public defineTransition(from: string, event: string, to: string, cb?: (...args: any[]) => unknown): this {
 		this.guardEditable();
 		const state = this.states.get(from)!;
 		if (state.transitions.has(event)) throw new Error(`attempt to redefine transition ${from} --${event}--> *, please only create transitions once`);
@@ -50,6 +80,12 @@ class StateMachine extends EventEmitter<StateMachineEvents> {
 		return this;
 	}
 
+	/**
+	 * Define a transition from every state to another state in the state machine.
+	 * @since 0.14.0
+	 * @param event The event that can trigger this transition.
+	 * @param to The name of the state this transition would go to.
+	 */
 	public defineUniversalTransition(event: string, to: string): this {
 		this.guardEditable();
 		this.deferredTransitionCreators.push(() => {
@@ -62,6 +98,10 @@ class StateMachine extends EventEmitter<StateMachineEvents> {
 		return this;
 	}
 
+	/**
+	 * Finalize the state machine, making its states and transitions now readonly and usable.
+	 * @since 0.14.0
+	 */
 	public freeze() {
 		this.guardEditable();
 
@@ -86,6 +126,14 @@ class StateMachine extends EventEmitter<StateMachineEvents> {
 		this.editable = false;
 	}
 
+	/**
+	 * Trigger an event to do a transition from the current state to another as defined previously.
+	 *
+	 * Will throw an Error if there is no transition from the current state to another based off the event.
+	 * @since 0.14.0
+	 * @param event The event that occured.
+	 * @param args Arguments to pass to the callback of the transition's onTransition functions if any.
+	 */
 	public doTransition(event: string, ...args: any[]): void {
 		this.guardNotEditable();
 		const from = this.currentStateName;
@@ -129,6 +177,15 @@ class StateMachine extends EventEmitter<StateMachineEvents> {
 		}
 	}
 
+	/**
+	 * Trigger an event to do a transition from the current state to another as defined previously at a later point in time.
+	 *
+	 * Will throw an Error if there is no transition from the current state to another based off the event.
+	 * @since 0.14.0
+	 * @param event The event that occured.
+	 * @param delayMs The time in milliseconds this transition will run in.
+	 * @param args Arguments to pass to the callback of the transition's onTransition functions if any.
+	 */
 	public doTransitionLater(event: string, delayMs: number, ...args: Array<any>): void {
 		this.guardNotEditable();
 		const timer = setTimeout(() => {
@@ -139,6 +196,10 @@ class StateMachine extends EventEmitter<StateMachineEvents> {
 		});
 	}
 
+	/**
+	 * Print debug info about this state machine to stdout in the form of a table.
+	 * @since 0.14.0
+	 */
 	public debug(): void {
 		console.table(this.history.map(h => ({
 			"At": new Date(h.time),

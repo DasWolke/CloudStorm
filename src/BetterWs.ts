@@ -272,6 +272,7 @@ class BetterWs extends EventEmitter<BWSEvents> {
 
 	/**
 	 * Connects to the server.
+	 * @since 0.5.0
 	 */
 	public connect(): void {
 		this.sm.doTransition("user_connect");

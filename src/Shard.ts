@@ -40,6 +40,7 @@ class Shard extends EventEmitter<ShardEvents> {
 
 	/**
 	 * Time in ms it took for Discord to ackknowledge an OP 1 HEARTBEAT.
+	 * @since 0.3.0
 	 */
 	public get latency(): number {
 		return this.connector.latency;
