@@ -1,6 +1,6 @@
 {
   "name": "cloudstorm",
-  "version": "0.15.0",
+  "version": "0.15.1",
   "description": "Minimalistic Discord Gateway library",
   "main": "./dist/index.js",
   "engines": {
@@ -15,7 +15,7 @@
   "license": "MIT",
   "dependencies": {
     "discord-api-types": "^0.38.37",
-    "snowtransfer": "^0.16.0"
+    "snowtransfer": "^0.16.1"
   },
   "devDependencies": {
     "@types/node": "^25.0.8",
