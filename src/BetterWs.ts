@@ -10,6 +10,8 @@ import { createInflate, inflateSync, constants, type Inflate } from "zlib";
 import https = require("https");
 import http = require("http");
 import util = require("util");
+import fs = require("fs");
+import path = require("path");
 
 import type { Socket } from "net";
 
@@ -18,8 +20,9 @@ import type {
 	IClientWSOptions
 } from "./Types";
 
-import StateMachine = require("./StateMachine");
-import stateMachineGraph = require("./StateMachineGraph");
+import { StateMachine, StateMachineGraph as stateMachineGraph } from "snowtransfer";
+
+const { version } = JSON.parse(fs.readFileSync(path.join(__dirname, "../package.json"), { encoding: "utf8" })); // otherwise, the json was included in the build
 
 /**
  * Call with an emitter and an object of callbacks, and the first event to be emitted will call the callback.
@@ -446,6 +449,7 @@ function createReq(address: string, options: BetterWs["options"]): { req: http.C
 		headers: {
 			"Connection": "Upgrade",
 			"Upgrade": "websocket",
+			"User-Agent": `Discordbot (https://github.com/DasWolke/CloudStorm, ${version}) Node.js/${process.version}`,
 			"Sec-WebSocket-Key": key,
 			"Sec-WebSocket-Version": "13",
 			...options.headers

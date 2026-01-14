@@ -3,7 +3,7 @@
 import type { EventEmitter } from "events";
 
 import Shard = require("./Shard");
-import { LocalBucket } from "snowtransfer";
+import { Bucket } from "snowtransfer";
 
 import {
 	IClientOptions,
@@ -22,9 +22,9 @@ class ShardManager {
 	/** A Record of shards keyed by their ID */
 	public shards: Record<string, Shard> = {};
 	/** The bucket used to identify a certain number of shards within a day. */
-	public identifyBucket = new LocalBucket(1000, 1000 * 60 * 60 * 24);
+	public identifyBucket = new Bucket(1000, 1000 * 60 * 60 * 24);
 	/** The buckets used to identify x number of shards within 5 second intervals. Larger bots benefit from this, but doesn't change how many times per day any shards can identify. */
-	public concurrencyBuckets: Record<string, LocalBucket> = {};
+	public concurrencyBuckets: Record<string, Bucket> = {};
 
 	/**
 	 * Create a new ShardManager.
@@ -71,12 +71,12 @@ class ShardManager {
 		});
 		shard.on("queueIdentify", (shardId) => {
 			this.client.emit("debug", `Shard ${shardId} is ready to identify`);
-			this.identifyBucket.enqueue(() => {
+			this.identifyBucket.enqueue(async () => {
 				const max_concurrency = Object.keys(this.concurrencyBuckets!).length;
 				const concurrencyRoute = shardId % max_concurrency;
 				const bkt = this.concurrencyBuckets[concurrencyRoute];
 				if (!bkt) return this.client.emit("error", `Received a queueIdentify event for shard ${shardId} and a concurrency route of ${concurrencyRoute} with a max_concurrency of ${max_concurrency}, but there was no bucket with that route internally.`);
-				bkt.enqueue(() => {
+				bkt.enqueue(async () => {
 					shard.connector.identify();
 				});
 			});

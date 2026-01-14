@@ -5,7 +5,7 @@ import BetterWs = require("./BetterWs");
 import { GATEWAY_OP_CODES as OP, GATEWAY_VERSION } from "./Constants";
 import Intents = require("./Intents");
 
-import { LocalBucket } from "snowtransfer";
+import { Bucket } from "snowtransfer";
 
 import {
 	type GatewayReceivePayload,
@@ -82,11 +82,11 @@ class DiscordConnector extends EventEmitter<ConnectorEvents> {
 	/** If this connector is disconnected/disconnecting currently, but will reconnect eventually */
 	public reconnecting = false;
 	/** The ratelimit bucket for how many packets this ws can send within a time frame. */
-	public wsBucket = new LocalBucket(120, 60000);
+	public wsBucket = new Bucket(120, 60000);
 	/** The ratelimit bucket for how many presence update specific packets this ws can send within a time frame. Is still affected by the overall packet send bucket. */
-	public presenceBucket = new LocalBucket(5, 60000);
+	public presenceBucket = new Bucket(5, 60000);
 	/** The ratelimit bucket for when requesting all guild members from a guild. Is still affected by the overall packet send bucket. */
-	public membersBucket = new LocalBucket(1, 30000);
+	public membersBucket = new Bucket(1, 30000);
 
 	/** If this connector is waiting to be fully closed */
 	private _closing = false;
@@ -123,9 +123,9 @@ class DiscordConnector extends EventEmitter<ConnectorEvents> {
 		this.betterWs.on("error", event => this.client.emit("error", event));
 		this.betterWs.on("ws_send", data => this.client.emit("rawSend", data));
 
-		this.wsBucket.queue.setBlocked(true);
-		this.presenceBucket.queue.setBlocked(true);
-		this.membersBucket.queue.setBlocked(true);
+		this.wsBucket.pause();
+		this.presenceBucket.pause();
+		this.membersBucket.pause();
 	}
 
 	/**
@@ -145,9 +145,9 @@ class DiscordConnector extends EventEmitter<ConnectorEvents> {
 	 */
 	public async disconnect(): Promise<void> {
 		this._closing = true;
-		this.wsBucket.queue.setBlocked(true);
-		this.presenceBucket.queue.setBlocked(true);
-		this.membersBucket.queue.setBlocked(true);
+		this.wsBucket.pause();
+		this.presenceBucket.pause();
+		this.membersBucket.pause();
 		return this.betterWs.close(1000, "Disconnected by User");
 	}
 
@@ -213,8 +213,8 @@ class DiscordConnector extends EventEmitter<ConnectorEvents> {
 	 */
 	private async _reconnect(resume = false): Promise<void> {
 		this.reconnecting = resume;
-		this.wsBucket.queue.setBlocked(true);
-		this.presenceBucket.queue.setBlocked(true);
+		this.wsBucket.pause();
+		this.presenceBucket.pause();
 		await this.betterWs.close(resume ? 4000 : 1012, "reconnecting");
 		if (resume) {
 			this.clearHeartBeat();
@@ -361,9 +361,9 @@ class DiscordConnector extends EventEmitter<ConnectorEvents> {
 			this.emit("stateChange", "ready");
 			this._trace = (message.d as unknown as { _trace: string })._trace;
 			this.emit("ready", message.t === "RESUMED");
-			this.wsBucket.queue.setBlocked(false);
-			this.presenceBucket.queue.setBlocked(false);
-			this.membersBucket.queue.setBlocked(false);
+			this.wsBucket.resume();
+			this.presenceBucket.resume();
+			this.membersBucket.resume();
 			break;
 		default:
 			void 0;
@@ -381,8 +381,8 @@ class DiscordConnector extends EventEmitter<ConnectorEvents> {
 		this.status = "disconnected";
 		this.emit("stateChange", "disconnected");
 		this.clearHeartBeat();
-		this.wsBucket.queue.setBlocked(true);
-		this.presenceBucket.queue.setBlocked(true);
+		this.wsBucket.pause();
+		this.presenceBucket.pause();
 
 		const isManualClose = code === 1000 && this._closing;
 
@@ -441,8 +441,8 @@ class DiscordConnector extends EventEmitter<ConnectorEvents> {
 	public async sendMessage(data: GatewaySendPayload): Promise<void> {
 		const bypass = this.options.ws!.bypassBuckets;
 		return new Promise<void>(res => {
-			const sendMsg = () => {
-				const fn = () => {
+			const sendMsg = async () => {
+				const fn = async () => {
 					this.betterWs.sendMessage(data);
 					res(void 0);
 				};
