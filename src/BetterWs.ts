@@ -112,7 +112,7 @@ class BetterWs extends EventEmitter<BWSEvents> {
 					return eventSwitch(req, {
 						upgrade: (res: http.IncomingMessage, socket: Socket) => {
 							try {
-								this.sm.doTransition("upgrade", key, res, socket);
+								this.sm.doTransition("upgrade", key, req, res, socket);
 							} catch (e) {
 								req.destroy();
 								throw e;
@@ -144,7 +144,7 @@ class BetterWs extends EventEmitter<BWSEvents> {
 						 * @param res The HTTP response from the server from connect.
 						 * @param socket The raw socket from upgrading the request from connect.
 						 */
-						(key: string, res: http.IncomingMessage, socket: Socket) => {
+						(key: string, req: http.ClientRequest, res: http.IncomingMessage, socket: Socket) => {
 							const hash = createHash("sha1").update(key + "258EAFA5-E914-47DA-95CA-C5AB0DC85B11").digest("base64");
 							const accept = res.headers["sec-websocket-accept"];
 							if (hash !== accept) {
@@ -155,6 +155,10 @@ class BetterWs extends EventEmitter<BWSEvents> {
 							}
 							socket.on("error", e => this.sm.doTransition("error", e));
 							socket.on("close", () => this.sm.doTransition("disconnect"));
+							req.on("error", e => {
+								console.log("---- CAUGHT A REQ ERROR ----")
+								this.sm.doTransition("error", e)
+							});
 							socket.on("readable", this._onReadable.bind(this));
 							this._socket = socket;
 							if (this.compress) {

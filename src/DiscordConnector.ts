@@ -5,7 +5,7 @@ import BetterWs = require("./BetterWs");
 import { GATEWAY_OP_CODES as OP, GATEWAY_VERSION } from "./Constants";
 import Intents = require("./Intents");
 
-import { Bucket } from "snowtransfer";
+import { Bucket, IntervalCounter } from "snowtransfer";
 
 import {
 	type GatewayReceivePayload,
@@ -82,11 +82,11 @@ class DiscordConnector extends EventEmitter<ConnectorEvents> {
 	/** If this connector is disconnected/disconnecting currently, but will reconnect eventually */
 	public reconnecting = false;
 	/** The ratelimit bucket for how many packets this ws can send within a time frame. */
-	public wsBucket = new Bucket(120, 60000);
+	public wsBucket = new Bucket([new IntervalCounter(120, 60000)]);
 	/** The ratelimit bucket for how many presence update specific packets this ws can send within a time frame. Is still affected by the overall packet send bucket. */
-	public presenceBucket = new Bucket(5, 60000);
+	public presenceBucket = new Bucket([new IntervalCounter(5, 60000)]);
 	/** The ratelimit bucket for when requesting all guild members from a guild. Is still affected by the overall packet send bucket. */
-	public membersBucket = new Bucket(1, 30000);
+	public membersBucket = new Bucket([new IntervalCounter(1, 30000)]);
 
 	/** If this connector is waiting to be fully closed */
 	private _closing = false;

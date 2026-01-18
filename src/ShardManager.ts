@@ -3,7 +3,7 @@
 import type { EventEmitter } from "events";
 
 import Shard = require("./Shard");
-import { Bucket } from "snowtransfer";
+import { Bucket, IntervalCounter } from "snowtransfer";
 
 import {
 	IClientOptions,
@@ -22,7 +22,7 @@ class ShardManager {
 	/** A Record of shards keyed by their ID */
 	public shards: Record<string, Shard> = {};
 	/** The bucket used to identify a certain number of shards within a day. */
-	public identifyBucket = new Bucket(1000, 1000 * 60 * 60 * 24);
+	public identifyBucket = new Bucket([new IntervalCounter(1000, 1000 * 60 * 60 * 24)]);
 	/** The buckets used to identify x number of shards within 5 second intervals. Larger bots benefit from this, but doesn't change how many times per day any shards can identify. */
 	public concurrencyBuckets: Record<string, Bucket> = {};
 

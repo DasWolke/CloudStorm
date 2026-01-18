@@ -6,7 +6,7 @@ import path = require("path");
 const version = JSON.parse(fs.readFileSync(path.join(__dirname, "../package.json"), { encoding: "utf8" })).version as string;
 import { EventEmitter } from "events";
 import Constants = require("./Constants");
-import { SnowTransfer, Bucket } from "snowtransfer";
+import { SnowTransfer, Bucket, IntervalCounter } from "snowtransfer";
 import ShardManager = require("./ShardManager");
 import type { APIGatewayBotInfo } from "discord-api-types/v10";
 
@@ -80,14 +80,13 @@ class Client extends EventEmitter<ClientEvents> {
 	public async fetchConnectInfo(): Promise<number> {
 		const gateway = await this.getGatewayBot();
 		this._updateEndpoint(gateway.url);
-		this.shardManager.identifyBucket.counters[0].remaining = gateway.session_start_limit.remaining;
-		this.shardManager.identifyBucket.counters[0].reset = gateway.session_start_limit.reset_after;
-		if (this.shardManager.identifyBucket.counters[0].remaining) this.shardManager.identifyBucket.resume();
+		this.shardManager.identifyBucket.counters[0].applyCount(null, gateway.session_start_limit.remaining, gateway.session_start_limit.reset_after);
+		if (this.shardManager.identifyBucket.counters[0].take()) this.shardManager.identifyBucket.resume();
 		for (const route of Object.keys(this.shardManager.concurrencyBuckets)) {
 			delete this.shardManager.concurrencyBuckets[route];
 		}
 		for (let i = 0; i < gateway.session_start_limit.max_concurrency; i++) {
-			this.shardManager.concurrencyBuckets[i] = new Bucket(1, 5000);
+			this.shardManager.concurrencyBuckets[i] = new Bucket([new IntervalCounter(1, 5000)]);
 		}
 		return gateway.shards;
 	}
