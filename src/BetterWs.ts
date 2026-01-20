@@ -156,7 +156,6 @@ class BetterWs extends EventEmitter<BWSEvents> {
 							socket.on("error", e => this.sm.doTransition("error", e));
 							socket.on("close", () => this.sm.doTransition("disconnect"));
 							req.on("error", e => {
-								console.log("---- CAUGHT A REQ ERROR ----")
 								this.sm.doTransition("error", e)
 							});
 							socket.on("readable", this._onReadable.bind(this));
