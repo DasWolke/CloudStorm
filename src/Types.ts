@@ -5,6 +5,8 @@ import type {
 	GatewaySendPayload
 } from "discord-api-types/v10";
 
+import type http = require("http");
+
 import type { SnowTransfer } from "snowtransfer";
 
 import type { IntentResolvable } from "./Intents";
@@ -47,6 +49,7 @@ export type BWSEvents = {
 	ws_send: [any];
 	debug: [string];
 	error: [string];
+	upgrade: [http.IncomingHttpHeaders];
 }
 
 export type ClientEvents = {

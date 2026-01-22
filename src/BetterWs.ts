@@ -153,6 +153,7 @@ class BetterWs extends EventEmitter<BWSEvents> {
 								});
 								return this.sm.doTransition("error");
 							}
+							this.emit("upgrade", res.headers);
 							socket.on("error", e => this.sm.doTransition("error", e));
 							socket.on("close", () => this.sm.doTransition("disconnect"));
 							req.on("error", e => {
