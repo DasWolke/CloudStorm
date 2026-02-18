@@ -14,8 +14,8 @@
   "author": "wolke <wolke@weeb.sh>",
   "license": "MIT",
   "dependencies": {
-    "discord-api-types": "^0.38.37",
-    "snowtransfer": "^0.17.0"
+    "discord-api-types": "^0.38.38",
+    "snowtransfer": "../SnowTransfer"
   },
   "devDependencies": {
     "@types/node": "^25.0.9",

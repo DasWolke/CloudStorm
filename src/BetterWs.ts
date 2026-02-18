@@ -9,7 +9,6 @@ import { randomBytes, createHash } from "crypto";
 import { createInflate, inflateSync, constants, type Inflate } from "zlib";
 import https = require("https");
 import http = require("http");
-import util = require("util");
 import fs = require("fs");
 import path = require("path");
 
@@ -89,7 +88,9 @@ class BetterWs extends EventEmitter<BWSEvents> {
 		this.sm.defineState("connect_wait", {
 			onEnter: [
 				() => {
-					this.sm.doTransitionLater("connect_allowed", this.lastConnectAttempt - Date.now() + this.connectThrottle)
+					const time = this.lastConnectAttempt - Date.now() + this.connectThrottle
+					if (time > 0) this.sm.doTransitionLater("connect_allowed", time)
+					else this.sm.doTransition("connect_allowed")
 				}
 			],
 			onLeave: [
@@ -126,7 +127,11 @@ class BetterWs extends EventEmitter<BWSEvents> {
 							throw new Error(`Expected HTTP 101 Upgrade, but got ${res.statusCode} ${res.statusMessage}`);
 						}
 					}).catch(error => {
-						this.sm.doTransition("error", error);
+						try {
+							this.sm.doTransition("error", error);
+						} catch (e) {
+							this.emit("error", "Error transitioning to error state")
+						}
 					});
 				}
 			],
@@ -153,11 +158,15 @@ class BetterWs extends EventEmitter<BWSEvents> {
 								});
 								return this.sm.doTransition("error");
 							}
-							socket.on("error", e => this.sm.doTransition("error", e));
-							socket.on("close", () => this.sm.doTransition("disconnect"));
-							req.on("error", e => {
-								this.sm.doTransition("error", e)
-							});
+							socket.on("error", e => this.emit("error", "Socket error")); // error will automatically close on the same tick
+							socket.on("close", () => {
+								try {
+									this.sm.doTransition("disconnect")
+								} catch {
+									this.emit("error", "Transition to disconnect error")
+								}
+						});
+							req.on("error", e => this.sm.doTransition("error", e));
 							socket.on("readable", this._onReadable.bind(this));
 							this._socket = socket;
 							if (this.compress) {
@@ -166,8 +175,21 @@ class BetterWs extends EventEmitter<BWSEvents> {
 								z._c = z.close; z._h = z._handle; z._hc = z._handle.close; z._v = () => void 0;
 								this._zlib = z;
 							}
+							this.emit("upgrade", res.headers);
 							this.emit("ws_open");
-							this.sm.doTransition("ws_open");
+							try {
+								this.sm.doTransition("ws_open");
+							} catch {
+								this.emit("error", "Transition to ws_open error")
+							}
+						}
+					]
+				}],
+				["error", {
+					destination: "disconnected",
+					onTransition: [
+						(error: Error) => {
+							this.emit("error", "Error while connected");
 						}
 					]
 				}]
@@ -202,8 +224,8 @@ class BetterWs extends EventEmitter<BWSEvents> {
 				["error", {
 					destination: "half_close",
 					onTransition: [
-						(error) => {
-							this.emit("error", util.inspect(error, true, 1, false));
+						(error: Error) => {
+							this.emit("error", "Error from half close");
 
 							// Ask Discord to disconnect us
 							this._write(Buffer.allocUnsafe(0), 8);
@@ -267,7 +289,7 @@ class BetterWs extends EventEmitter<BWSEvents> {
 			])
 		})
 
-		this.sm.defineUniversalTransition("error", "disconnected");
+		// this.sm.defineUniversalTransition("error", "disconnected");
 
 		this.sm.freeze();
 
