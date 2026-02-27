@@ -24,10 +24,6 @@ import eventSwitch = require("./eventSwitch");
 
 const { version } = JSON.parse(fs.readFileSync(path.join(__dirname, "../package.json"), { encoding: "utf8" })); // otherwise, the json was included in the build
 
-function getErrorStackFirstLine(error: Error): string {
-	return error.stack!.split("\n")[0].replace(new RegExp(`^${error.name}: (.+)`), "$1");
-}
-
 /**
  * Helper Class for simplifying the websocket connection to Discord.
  * @since 0.1.4
@@ -130,20 +126,11 @@ class BetterWs extends EventEmitter<BWSEvents> {
 								this._zlib = z;
 							}
 							this.emit("upgrade", res.headers);
-							this.sm.doTransition("ws_open");
+
 							this._socket.once("close", () => this.sm.doTransition("disconnect"));
-							this._socket.on("error", e => this.emit("error", getErrorStackFirstLine(e)));
+							this._socket.on("error", e => this.sm.doTransition("error", e));
 							this._socket.on("readable", this._onReadable.bind(this));
-							this.emit("ws_open");
-						}
-					]
-				}],
-				["error", {
-					destination: "disconnected",
-					onTransition: [
-						(error: Error) => {
-							if (!error) return;
-							this.emit("error", getErrorStackFirstLine(error));
+							this.sm.doTransition("ws_open");
 						}
 					]
 				}]
@@ -159,7 +146,11 @@ class BetterWs extends EventEmitter<BWSEvents> {
 		});
 
 		this.sm.defineState("connected", {
-			onEnter: [],
+			onEnter: [
+				() => {
+					this.emit("ws_open");
+				}
+			],
 			onLeave: [],
 			transitions: new Map([
 				["disconnect", { destination: "disconnected" }],
@@ -227,6 +218,10 @@ class BetterWs extends EventEmitter<BWSEvents> {
 			transitions: new Map([
 				["user_connect", { destination: "connect_wait" }]
 			])
+		});
+
+		this.sm.defineUniversalTransition("error", "disconnected", (error?: Error) => {
+			if (error) this.emit("error", error);
 		});
 
 		this.sm.freeze();
@@ -321,7 +316,7 @@ class BetterWs extends EventEmitter<BWSEvents> {
 			if (!frame) return;
 			const fin = frame[0] >> 7;
 			const opcode = frame[0] & 15;
-			if (fin !== 1 || opcode === 0) this.emit("error", "discord actually does send messages with fin=0. if you see this error let me know");
+			if (fin !== 1 || opcode === 0) this.emit("error", new Error("discord actually does send messages with fin=0. if you see this error let me know"));
 			const payload = frame.subarray(2 + bytes);
 			this._processFrame(opcode, payload);
 		}
@@ -357,7 +352,7 @@ class BetterWs extends EventEmitter<BWSEvents> {
 					error = e;
 				}
 				const l = message.length;
-				if (message[l - 4] !== 0 || message[l - 3] !== 0 || message[l - 2] !== 255 || message[l - 1] !== 255) this.emit("error", "discord actually does send fragmented zlib messages. If you see this error let me know");
+				if (message[l - 4] !== 0 || message[l - 3] !== 0 || message[l - 2] !== 255 || message[l - 1] !== 255) this.emit("error", new Error("discord actually does send fragmented zlib messages. If you see this error let me know"));
 				// @ts-ignore
 				z.close = z._c;
 				// @ts-ignore
@@ -370,12 +365,12 @@ class BetterWs extends EventEmitter<BWSEvents> {
 				z._eventCount--;
 				z.removeAllListeners("error");
 				if (error) {
-					this.emit("error", "Zlib error processing chunk");
+					this.emit("error", new Error("Zlib error processing chunk"));
 					this._write(Buffer.allocUnsafe(0), 8);
 					return;
 				}
 				if (!data) {
-					this.emit("error", "Data from zlib processing was null. If you see this error let me know"); // This should never run, but TS is lame
+					this.emit("error", new Error("Data from zlib processing was null. If you see this error let me know")); // This should never run, but TS is lame
 					return;
 				}
 				if (this.encoding === "json") packet = JSON.parse(String(data));

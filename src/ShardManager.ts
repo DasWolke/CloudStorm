@@ -75,7 +75,7 @@ class ShardManager {
 				const max_concurrency = Object.keys(this.concurrencyBuckets!).length;
 				const concurrencyRoute = shardId % max_concurrency;
 				const bkt = this.concurrencyBuckets[concurrencyRoute];
-				if (!bkt) return this.client.emit("error", `Received a queueIdentify event for shard ${shardId} and a concurrency route of ${concurrencyRoute} with a max_concurrency of ${max_concurrency}, but there was no bucket with that route internally.`);
+				if (!bkt) return this.client.emit("error", new Error(`Received a queueIdentify event for shard ${shardId} and a concurrency route of ${concurrencyRoute} with a max_concurrency of ${max_concurrency}, but there was no bucket with that route internally.`));
 				bkt.enqueue(async () => {
 					shard.connector.identify();
 				});
