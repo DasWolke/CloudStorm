@@ -130,6 +130,7 @@ class BetterWs extends EventEmitter<BWSEvents> {
 							this._socket.once("close", () => this.sm.doTransition("disconnect"));
 							this._socket.on("error", e => this.sm.doTransition("error", e));
 							this._socket.on("readable", this._onReadable.bind(this));
+							this.emit("ws_open");
 							this.sm.doTransition("ws_open");
 						}
 					]
@@ -146,11 +147,7 @@ class BetterWs extends EventEmitter<BWSEvents> {
 		});
 
 		this.sm.defineState("connected", {
-			onEnter: [
-				() => {
-					this.emit("ws_open");
-				}
-			],
+			onEnter: [],
 			onLeave: [],
 			transitions: new Map([
 				["disconnect", { destination: "disconnected" }],
