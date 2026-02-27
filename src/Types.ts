@@ -48,7 +48,7 @@ export type BWSEvents = {
 	ws_receive: [any];
 	ws_send: [any];
 	debug: [string];
-	error: [string];
+	error: [Error];
 	upgrade: [http.IncomingHttpHeaders];
 }
 
@@ -56,7 +56,7 @@ export type ClientEvents = {
 	debug: [string];
 	rawSend: [GatewaySendPayload];
 	rawReceive: [GatewayReceivePayload];
-	error: [string]; // no processing messages
+	error: [Error]; // no processing messages
 
 	event: [IGatewayMessage];
 	dispatch: [IGatewayDispatch];

@@ -269,7 +269,7 @@ class DiscordConnector extends EventEmitter<ConnectorEvents> {
 	 */
 	public async identify(): Promise<void> {
 		if (this.betterWs.sm.currentStateName !== "connected") {
-			this.client.emit("error", `Shard ${this.id} was attempting to identify when the ws was not open. Current state: ${this.betterWs.sm.currentStateName}`);
+			this.client.emit("error", new Error(`Shard ${this.id} was attempting to identify when the ws was not open. Current state: ${this.betterWs.sm.currentStateName}`));
 			return this._reconnect(true);
 		}
 		this.client.emit("debug", `Shard ${this.id} is identifying`);
@@ -302,7 +302,7 @@ class DiscordConnector extends EventEmitter<ConnectorEvents> {
 	 */
 	public async resume(): Promise<void> {
 		if (this.betterWs.sm.currentStateName !== "connected") {
-			this.client.emit("error", `Shard ${this.id} was attempting to resume when the ws was not open. Current state: ${this.betterWs.sm.currentStateName}`);
+			this.client.emit("error", new Error(`Shard ${this.id} was attempting to resume when the ws was not open. Current state: ${this.betterWs.sm.currentStateName}`));
 			return this._reconnect(true);
 		}
 		this.client.emit("debug", `Shard ${this.id} is resuming`);
@@ -322,7 +322,7 @@ class DiscordConnector extends EventEmitter<ConnectorEvents> {
 	 */
 	private heartbeat(): void {
 		if (this.betterWs.sm.currentStateName !== "connected") {
-			this.client.emit("error", `Shard ${this.id} was attempting to heartbeat when the ws was not open. Current state: ${this.betterWs.sm.currentStateName}`);
+			this.client.emit("error", new Error(`Shard ${this.id} was attempting to heartbeat when the ws was not open. Current state: ${this.betterWs.sm.currentStateName}`));
 			return void this._reconnect(true);
 		}
 		this.betterWs.sendMessage({ op: OP.HEARTBEAT, d: this.seq === 0 ? null : this.seq });
@@ -393,7 +393,7 @@ class DiscordConnector extends EventEmitter<ConnectorEvents> {
 		if (isRecoverable && this.resumeAddress) this.betterWs.address = this.resumeAddress;
 		else this.betterWs.address = this.identifyAddress;
 
-		if (message) this.client.emit("error", message);
+		if (message) this.client.emit("error", new Error(message));
 
 		if (isManualClose || this.reconnecting) gracefulClose = true;
 
