@@ -5,7 +5,7 @@ import type { EventEmitter } from "events";
  * If the callback returns a promise, waits for the promise to resolve or reject. eventSwitch will resolve or reject with the same value.
  * All added listeners are removed before eventSwitch returns.
  */
-function eventSwitch(emitter: EventEmitter, signal: AbortSignal | null, cbs: { [eventName: string]: (...args: any[]) => any }): Promise<void> {
+function eventSwitch(emitter: EventEmitter, cbs: { [eventName: string]: (...args: any[]) => any }, signal?: AbortSignal | null): Promise<void> {
 	const realListeners = new Map<string, (...args: Array<any>) => void>();
 	return Promise.race(
 		Object.entries(cbs).map(([event, cb]) => {
