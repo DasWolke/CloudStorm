@@ -90,7 +90,7 @@ class BetterWs extends EventEmitter<BWSEvents> {
 				() => {
 					const { req, key } = createReq(this.address, this.options);
 					this.emit("debug", "Socket sending request to upgrade");
-					eventSwitch(req, AbortSignal.timeout(15000), {
+					eventSwitch(req, {
 						upgrade: (res: http.IncomingMessage, socket: Socket) => {
 							this.sm.doTransition("upgrade", key, res, socket);
 						},
@@ -101,7 +101,7 @@ class BetterWs extends EventEmitter<BWSEvents> {
 							req.destroy();
 							throw new Error(`Expected HTTP 101 Upgrade, but got ${res.statusCode} ${res.statusMessage}`);
 						}
-					}).catch(error => {
+					}, AbortSignal.timeout(15000)).catch(error => {
 						this.sm.doTransition("error", error);
 					});
 				}
