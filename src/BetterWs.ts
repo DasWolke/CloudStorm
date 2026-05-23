@@ -90,7 +90,7 @@ class BetterWs extends EventEmitter<BWSEvents> {
 				() => {
 					const { req, key } = createReq(this.address, this.options);
 					this.emit("debug", "Socket sending request to upgrade");
-					return eventSwitch(req, {
+					eventSwitch(req, AbortSignal.timeout(15000), {
 						upgrade: (res: http.IncomingMessage, socket: Socket) => {
 							this.sm.doTransition("upgrade", key, res, socket);
 						},
