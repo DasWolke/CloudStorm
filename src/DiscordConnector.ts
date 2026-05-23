@@ -148,6 +148,7 @@ class DiscordConnector extends EventEmitter<ConnectorEvents> {
 		this.wsBucket.pause();
 		this.presenceBucket.pause();
 		this.membersBucket.pause();
+		this.clearHeartBeat();
 		return this.betterWs.close(1000, "Disconnected by User");
 	}
 
@@ -321,6 +322,7 @@ class DiscordConnector extends EventEmitter<ConnectorEvents> {
 	 * @since 0.1.4
 	 */
 	private heartbeat(): void {
+		if (this.betterWs.sm.currentStateName === "user_close") return;
 		if (this.betterWs.sm.currentStateName !== "connected") {
 			this.client.emit("error", new Error(`Shard ${this.id} was attempting to heartbeat when the ws was not open. Current state: ${this.betterWs.sm.currentStateName}`));
 			return void this._reconnect(true);
