@@ -1,6 +1,4 @@
-"use strict";
-
-import { EventEmitter } from "events";
+import { EventEmitter } from "node:events";
 import BetterWs = require("./BetterWs");
 import { GATEWAY_OP_CODES as OP, GATEWAY_VERSION } from "./Constants";
 import Intents = require("./Intents");
@@ -28,8 +26,8 @@ import type {
 	IGatewayDispatch
 } from "./Types";
 
-const resumableCodes = [4008, 4005, 4003, 4002, 4001, 4000, 1006, 1001];
-const shouldntAttemptReconnectCodes = [4014, 4013, 4012, 4011, 4010, 4004];
+const resumableCodes = new Set([4008, 4005, 4003, 4002, 4001, 4000, 1006, 1001]);
+const shouldntAttemptReconnectCodes = new Set([4014, 4013, 4012, 4011, 4010, 4004]);
 const disconnectMessages = {
 	4014: "Disallowed Intents, check your client options and application page.",
 	4013: "Invalid Intents data, check your client options.",
@@ -58,7 +56,7 @@ class DiscordConnector extends EventEmitter<ConnectorEvents> {
 	/** The WebSocket this connector uses */
 	public betterWs: BetterWs;
 	/** A Timeout that, when triggered, will send an op 1 heartbeat. Is null if Discord hasn't told this connector how often to heartbeat */
-	public heartbeatTimeout: NodeJS.Timeout | null = null;
+	public heartbeatTimeout: globalThis.NodeJS.Timeout | null = null;
 	/** How often this connector should heartbeat if not 0 */
 	public heartbeatInterval = 0;
 	/** The _trace as sent by the Discord READY and RESUMED payloads */
@@ -91,9 +89,9 @@ class DiscordConnector extends EventEmitter<ConnectorEvents> {
 	/** If this connector is waiting to be fully closed */
 	private _closing = false;
 	/** A Timeout that, when triggered, closes the connection because op HELLO hasn't been received and may never be received */
-	private _openToHeartbeatTimeout: NodeJS.Timeout | null = null;
+	private _openToHeartbeatTimeout: globalThis.NodeJS.Timeout | null = null;
 	/** A Timeout that, when triggered, sends the first heartbeat */
-	private _initialHeartbeatTimeout: NodeJS.Timeout | null = null;
+	private _initialHeartbeatTimeout: globalThis.NodeJS.Timeout | null = null;
 
 	/**
 	 * Creates a new Discord Connector.
@@ -148,6 +146,9 @@ class DiscordConnector extends EventEmitter<ConnectorEvents> {
 		this.wsBucket.pause();
 		this.presenceBucket.pause();
 		this.membersBucket.pause();
+		this.clearHeartBeat();
+		const state = this.betterWs.sm.currentStateName;
+		if (state !== "connected" && state !== "half_close") return;
 		return this.betterWs.close(1000, "Disconnected by User");
 	}
 
@@ -180,7 +181,7 @@ class DiscordConnector extends EventEmitter<ConnectorEvents> {
 			if (withShardID.d && this.sessionId) this.resume();
 			else {
 				this.seq = 0;
-				this.sessionId = "";
+				this.sessionId = null;
 				this.emit("queueIdentify", this.id);
 			}
 			break;
@@ -212,6 +213,8 @@ class DiscordConnector extends EventEmitter<ConnectorEvents> {
 	 * @param resume Whether or not the client intends to send an OP 6 RESUME later.
 	 */
 	private async _reconnect(resume = false): Promise<void> {
+		const state = this.betterWs.sm.currentStateName;
+		if (state !== "connected" && state !== "half_close") return;
 		this.reconnecting = resume;
 		this.wsBucket.pause();
 		this.presenceBucket.pause();
@@ -258,8 +261,10 @@ class DiscordConnector extends EventEmitter<ConnectorEvents> {
 	private clearHeartBeat(): void {
 		if (this.heartbeatTimeout) clearInterval(this.heartbeatTimeout);
 		if (this._initialHeartbeatTimeout) clearTimeout(this._initialHeartbeatTimeout);
+		if (this._openToHeartbeatTimeout) clearTimeout(this._openToHeartbeatTimeout);
 		this.heartbeatTimeout = null;
 		this._initialHeartbeatTimeout = null;
+		this._openToHeartbeatTimeout = null;
 		this.heartbeatInterval = 0;
 	}
 
@@ -321,6 +326,7 @@ class DiscordConnector extends EventEmitter<ConnectorEvents> {
 	 * @since 0.1.4
 	 */
 	private heartbeat(): void {
+		if (this.betterWs.sm.currentStateName === "user_close") return;
 		if (this.betterWs.sm.currentStateName !== "connected") {
 			this.client.emit("error", new Error(`Shard ${this.id} was attempting to heartbeat when the ws was not open. Current state: ${this.betterWs.sm.currentStateName}`));
 			return void this._reconnect(true);
@@ -387,8 +393,8 @@ class DiscordConnector extends EventEmitter<ConnectorEvents> {
 		const isManualClose = code === 1000 && this._closing;
 
 		const message = disconnectMessages[code as keyof typeof disconnectMessages];
-		const isRecoverable = resumableCodes.includes(code);
-		const shouldntReconnect = shouldntAttemptReconnectCodes.includes(code) || isManualClose;
+		const isRecoverable = resumableCodes.has(code);
+		const shouldntReconnect = shouldntAttemptReconnectCodes.has(code) || isManualClose;
 
 		if (isRecoverable && this.resumeAddress) this.betterWs.address = this.resumeAddress;
 		else this.betterWs.address = this.identifyAddress;
@@ -419,7 +425,7 @@ class DiscordConnector extends EventEmitter<ConnectorEvents> {
 	 * @param data Voice state update data to send.
 	 */
 	public async voiceStateUpdate(data: GatewayVoiceStateUpdateData & { self_deaf?: boolean; self_mute?: boolean; }): Promise<void> {
-		if (!data) return Promise.resolve();
+		if (!data) return;
 		return this.sendMessage({ op: OP.VOICE_STATE_UPDATE, d: this._checkVoiceStateUpdateData(data) });
 	}
 
@@ -449,21 +455,21 @@ class DiscordConnector extends EventEmitter<ConnectorEvents> {
 				if (bypass) fn();
 				else this.wsBucket.enqueue(fn);
 			};
-			if (!bypass) {
+			if (bypass) sendMsg();
+			else {
 				switch (data.op) {
-					case OP.PRESENCE_UPDATE:
-						this.presenceBucket.enqueue(sendMsg);
-						break;
-					case OP.REQUEST_GUILD_MEMBERS:
-						if ("query" in data.d && data.d.query.length === 0 && data.d.limit === 0) this.membersBucket.enqueue(sendMsg);
-						else sendMsg();
-						break;
-					default:
-						sendMsg();
-						break;
+				case OP.PRESENCE_UPDATE:
+					this.presenceBucket.enqueue(sendMsg);
+					break;
+				case OP.REQUEST_GUILD_MEMBERS:
+					if ("query" in data.d && data.d.query.length === 0 && data.d.limit === 0) this.membersBucket.enqueue(sendMsg);
+					else sendMsg();
+					break;
+				default:
+					sendMsg();
+					break;
 				}
 			}
-			else sendMsg();
 		});
 	}
 
@@ -478,8 +484,8 @@ class DiscordConnector extends EventEmitter<ConnectorEvents> {
 		data.activities = data.activities && Array.isArray(data.activities) ? data.activities : [];
 
 		if (data.activities) {
-			for (const activity of data.activities) {
-				const index = data.activities.indexOf(activity);
+			for (let index = data.activities.length - 1; index >= 0; index--) {
+				const activity = data.activities[index];
 				activity.type ??= activity.url ? 1 : 0;
 				if (!activity.name) {
 					if (activity.state && activity.type === 4) activity.name = "Custom Status"; // Discord requires name to not be empty even on custom status

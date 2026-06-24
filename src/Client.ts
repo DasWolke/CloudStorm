@@ -1,10 +1,8 @@
-"use strict";
-
-import fs = require("fs");
-import path = require("path");
+import fs = require("node:fs");
+import path = require("node:path");
 
 const version = JSON.parse(fs.readFileSync(path.join(__dirname, "../package.json"), { encoding: "utf8" })).version as string;
-import { EventEmitter } from "events";
+import { EventEmitter } from "node:events";
 import Constants = require("./Constants");
 import { SnowTransfer, Bucket, IntervalCounter } from "snowtransfer";
 import ShardManager = require("./ShardManager");
@@ -147,14 +145,14 @@ class Client extends EventEmitter<ClientEvents> {
 	 * @returns Promise that's resolved once the shard has sent the websocket payload.
 	 *
 	 * @example
-	 * // Connect to Discord and set status to do not disturb and activity to "Im shard 0".
+	 * // Connect to Discord and set status to do not disturb and activity to "I'm shard 0".
 	 * const CloudStorm = require("cloudstorm"); // CloudStorm also supports import statements.
 	 * const token = "token";
 	 * const client = new CloudStorm.Client(token);
 	 * client.connect();
 	 * client.once("ready", () => {
 	 * 	// Client is connected to Discord and is ready, so we can update the status of shard 0.
-	 * 	client.shardPresenceUpdate(0, { status: "dnd", activities: [{ name: "Im shard 0", type: 0 }] });
+	 * 	client.shardPresenceUpdate(0, { status: "dnd", activities: [{ name: "I'm shard 0", type: 0 }] });
 	 * });
 	 */
 	public shardPresenceUpdate(shardId: number, data: Parameters<Client["shardManager"]["shardPresenceUpdate"]>["1"]): Promise<void> {
@@ -204,7 +202,7 @@ class Client extends EventEmitter<ClientEvents> {
 	 * 	client.requestGuildMembers(0, { guild_id: "id" });
 	 * });
 	 */
-	public requestGuildMembers(shardId: number, data: Parameters<Client["shardManager"]["requestGuildMembers"]>["1"]): Promise<void> {
+	public async requestGuildMembers(shardId: number, data: Parameters<Client["shardManager"]["requestGuildMembers"]>["1"]): Promise<void> {
 		if (!data.guild_id) throw new Error("You need to pass a guild_id");
 		return this.shardManager.requestGuildMembers(shardId, data);
 	}

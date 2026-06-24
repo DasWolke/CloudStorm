@@ -5,7 +5,7 @@ import type {
 	GatewaySendPayload
 } from "discord-api-types/v10";
 
-import type http = require("http");
+import type http = require("node:http");
 
 import type { SnowTransfer } from "snowtransfer";
 

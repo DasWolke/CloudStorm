@@ -1,5 +1,3 @@
-"use strict";
-
 const Constants = {
 	GATEWAY_OP_CODES: {
 		/**

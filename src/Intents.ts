@@ -1,5 +1,3 @@
-"use strict";
-
 export type IntentFlags = typeof flags;
 export type IntentResolvable = number | Array<number> | keyof IntentFlags | Array<keyof IntentFlags>;
 
@@ -44,7 +42,7 @@ export const non_privileged = all & ~privileged;
  */
 export function resolve(bit: IntentResolvable = 0): number {
 	if (typeof bit === "number" && bit >= 0) return bit;
-	if (typeof bit === "string" && flags[bit]) return flags[bit] | 0;
+	if (typeof bit === "string" && flags[bit]) return Math.trunc(flags[bit]);
 	if (Array.isArray(bit)) return bit.map((p: IntentResolvable) => resolve(p)).reduce((prev, p) => prev | p, 0);
 	throw new RangeError("BITFIELD_INVALID");
 }

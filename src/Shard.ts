@@ -1,13 +1,11 @@
-"use strict";
-
-import { EventEmitter } from "events";
+import { EventEmitter } from "node:events";
 import DC = require("./DiscordConnector");
 
 import type {
 	ShardEvents,
 	ClientEvents,
 	IClientOptions
-} from "./Types"
+} from "./Types";
 
 /**
  * Shard class, which provides a wrapper around the DiscordConnector with metadata like the id of the shard.
@@ -39,7 +37,7 @@ class Shard extends EventEmitter<ShardEvents> {
 	}
 
 	/**
-	 * Time in ms it took for Discord to ackknowledge an OP 1 HEARTBEAT.
+	 * Time in ms it took for Discord to acknowledge an OP 1 HEARTBEAT.
 	 * @since 0.3.0
 	 */
 	public get latency(): number {
