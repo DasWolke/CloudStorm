@@ -1,25 +1,26 @@
 {
 	"compilerOptions": {
-		"allowSyntheticDefaultImports": false,
 		"allowJs": true,
 		"checkJs": true,
-		"esModuleInterop": false,
-		"declaration": true,
+		"declaration": false,
 		"lib": ["es2024", "dom"],
-		"module": "commonjs",
-		"moduleResolution": "node",
+		"module": "nodenext",
+		"moduleResolution": "nodenext",
 		"noUnusedLocals": true,
-		"outDir": "./dist",
 		"pretty": true,
-		"removeComments": false,
-		"resolveJsonModule": false,
+		"removeComments": true,
+		"resolveJsonModule": true,
 		"sourceMap": true,
+		"skipLibCheck": true,
 		"strictFunctionTypes": true,
 		"strictBindCallApply": true,
 		"strictNullChecks": true,
-		"target": "ES2019",
+		"alwaysStrict": true,
+		"target": "ES2024",
 		"types": ["node"],
-		"skipLibCheck": true
+		"outDir": "./dist",
+		"rootDir": "./src"
 	},
-	"include": ["./src"]
+	"include": ["./src"],
+	"exclude": ["node_modules"]
 }

@@ -1,18 +1,16 @@
-"use strict";
-
 // This ultra light weight WS code is a slimmed down version originally found at https://github.com/timotejroiko/tiny-discord
 // Modifications and use of this code was granted for this project by the author, Timotej Roiko.
 // A major thank you to Tim for better performing software.
 
-import { EventEmitter } from "events";
-import { randomBytes, createHash } from "crypto";
-import { createInflate, inflateSync, constants, type Inflate } from "zlib";
-import https = require("https");
-import http = require("http");
-import fs = require("fs");
-import path = require("path");
+import { EventEmitter } from "node:events";
+import { randomBytes, createHash } from "node:crypto";
+import { createInflate, inflateSync, constants, type Inflate } from "node:zlib";
+import https = require("node:https");
+import http = require("node:http");
+import fs = require("node:fs");
+import path = require("node:path");
 
-import type { Socket } from "net";
+import type { Socket } from "node:net";
 
 import type {
 	BWSEvents,
@@ -38,7 +36,7 @@ class BetterWs extends EventEmitter<BWSEvents> {
 	/** Tracks the state this WebSocket is in and what operations are allowed. */
 	public sm = new StateMachine("disconnected");
 
-	/** The raw net.Socket retreived from upgrading the connection or null if not upgraded/closed. */
+	/** The raw net.Socket retrieved from upgrading the connection or null if not upgraded/closed. */
 	private _socket: Socket | null = null;
 	/** If a request is going through to initiate a WebSocket connection and hasn't been upgraded by the server yet. */
 	/** Code received from frame op 8 */
@@ -55,7 +53,7 @@ class BetterWs extends EventEmitter<BWSEvents> {
 
 	/**
 	 * Creates a new lightweight WebSocket.
-	 * @param address The http(s):// or ws(s):// URL cooresponding to the server to connect to.
+	 * @param address The http(s):// or ws(s):// URL corresponding to the server to connect to.
 	 * @param options Options specific to this WebSocket.
 	 */
 	public constructor(public address: string, public options: Omit<IClientWSOptions, "encoding"> & { encoding?: IClientWSOptions["encoding"] | "other" }) {
@@ -155,7 +153,7 @@ class BetterWs extends EventEmitter<BWSEvents> {
 					destination: "half_close",
 					onTransition: [
 						(code: number, reason?: string) => {
-							this.emit("debug", `User requested socket close`);
+							this.emit("debug", "User requested socket close");
 
 							// Ask Discord to disconnect us
 							const from = Buffer.from([code >> 8, code & 255]);
@@ -223,7 +221,7 @@ class BetterWs extends EventEmitter<BWSEvents> {
 
 		this.sm.freeze();
 
-		if (process.argv.includes(`--state-machine-graph-betterws`)) {
+		if (process.argv.includes("--state-machine-graph-betterws")) {
 			console.log(stateMachineGraph.graph(this.sm));
 		}
 	}
@@ -465,7 +463,7 @@ function readETF(data: Buffer, start: number): Record<any, any> | null | undefin
 				atom = data.latin1Slice(x += 2, x + length);
 			} else {
 				for (let i = x += 2; i < x + length; i++) {
-					atom += String.fromCharCode(data[i]);
+					atom += String.fromCodePoint(data[i]);
 				}
 			}
 			x += length;
@@ -507,9 +505,9 @@ function readETF(data: Buffer, start: number): Record<any, any> | null | undefin
 				const l = x + length;
 				while(i < l) {
 					const byte = data[i++];
-					if (byte < 128) str += String.fromCharCode(byte);
-					else if (byte < 224) str += String.fromCharCode(((byte & 31) << 6) + (data[i++] & 63));
-					else if (byte < 240) str += String.fromCharCode(((byte & 15) << 12) + ((data[i++] & 63) << 6) + (data[i++] & 63));
+					if (byte < 128) str += String.fromCodePoint(byte);
+					else if (byte < 224) str += String.fromCodePoint(((byte & 31) << 6) + (data[i++] & 63));
+					else if (byte < 240) str += String.fromCodePoint(((byte & 15) << 12) + ((data[i++] & 63) << 6) + (data[i++] & 63));
 					else str += String.fromCodePoint(((byte & 7) << 18) + ((data[i++] & 63) << 12) + ((data[i++] & 63) << 6) + (data[i++] & 63));
 				}
 			}
@@ -529,12 +527,10 @@ function readETF(data: Buffer, start: number): Record<any, any> | null | undefin
 					num += view.getBigUint64(x + (left -= 8), true);
 				} else if (left >= 4) {
 					num <<= BigInt(32);
-					// @ts-ignore
-					num += BigInt(view.getUint32(x + (left -= 4)), true);
+					num += BigInt(view.getUint32(x + (left -= 4), true));
 				} else if (left >= 2) {
 					num <<= BigInt(16);
-					// @ts-ignore
-					num += BigInt(view.getUint16(x + (left -= 2)), true);
+					num += BigInt(view.getUint16(x + (left -= 2), true));
 				} else {
 					num <<= BigInt(8);
 					num += BigInt(data[x]);
@@ -644,7 +640,7 @@ function writeETF(data: any): Buffer {
 				}
 				b[i++] = 106;
 			} else {
-				const entries = Object.entries(obj).filter(x => typeof x[1] !== "undefined");
+				const entries = Object.entries(obj).filter(x => x[1] !== undefined);
 				b[i++] = 116;
 				b.writeUInt32BE(entries.length, i);
 				i += 4;

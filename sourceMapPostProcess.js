@@ -1,5 +1,7 @@
-const fs = require("fs");
-const path = require("path");
+"use strict";
+
+const fs = require("node:fs");
+const path = require("node:path");
 const config = require("./tsconfig.json");
 const oneLineCommentRegex = /\t* *\/\/.+\n?/g;
 const multiLineCommentRegex = /\t*\/\*\*[\S\s]+?\*\/\n?/gm;

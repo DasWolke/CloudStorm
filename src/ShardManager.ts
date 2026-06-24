@@ -1,6 +1,4 @@
-"use strict";
-
-import type { EventEmitter } from "events";
+import type { EventEmitter } from "node:events";
 
 import Shard = require("./Shard");
 import { Bucket, IntervalCounter } from "snowtransfer";
@@ -39,7 +37,7 @@ class ShardManager {
 	 */
 	public spawn(): void {
 		if (!Object.keys(this.concurrencyBuckets).length) throw new Error("Trying to spawn shards without calling Client.fetchConnectInfo()\nIf you intended to just let cloudstorm handle things for you, you should just use Client.connect() instead");
-		for (const id of (this.options.shards === "auto" ? Array(this.options.totalShards).fill(0).map((_, index) => index) : this.options.shards ?? [0])) {
+		for (const id of (this.options.shards === "auto" ? new Array(this.options.totalShards).fill(0).map((_, index) => index) : this.options.shards ?? [0])) {
 			this.client.emit("debug", `Spawned shard ${id}`);
 			this.shards[id] = new Shard(id, this.client);
 			this._addListener(this.shards[id]);
@@ -136,8 +134,8 @@ class ShardManager {
 	public shardPresenceUpdate(shardId: number, data: Parameters<Shard["presenceUpdate"]>["0"]): Promise<void> {
 		return new Promise((res, rej) => {
 			const shard = this.shards[shardId];
-			if (!shard) rej(new Error(`Shard ${shardId} does not exist`));
-			if (!shard.ready) return;
+			if (!shard) return rej(new Error(`Shard ${shardId} does not exist`));
+			if (!shard.ready) return rej(new Error(`Shard ${shardId} is not ready`));
 			shard.presenceUpdate(data).then(result => res(result)).catch(e => rej(e as Error));
 		});
 	}
@@ -151,8 +149,8 @@ class ShardManager {
 	public voiceStateUpdate(shardId: number, data: Parameters<Shard["voiceStateUpdate"]>["0"]): Promise<void> {
 		return new Promise((res, rej) => {
 			const shard = this.shards[shardId];
-			if (!shard) rej(new Error(`Shard ${shardId} does not exist`));
-			if (!shard.ready) return;
+			if (!shard) return rej(new Error(`Shard ${shardId} does not exist`));
+			if (!shard.ready) return rej(new Error(`Shard ${shardId} is not ready`));
 			shard.voiceStateUpdate(data).then(result => res(result)).catch(e => rej(e as Error));
 		});
 	}
@@ -166,8 +164,8 @@ class ShardManager {
 	public requestGuildMembers(shardId: number, data: Parameters<Shard["requestGuildMembers"]>["0"]): Promise<void> {
 		return new Promise((res, rej) => {
 			const shard = this.shards[shardId];
-			if (!shard) rej(new Error(`Shard ${shardId} does not exist`));
-			if (!shard.ready) return;
+			if (!shard) return rej(new Error(`Shard ${shardId} does not exist`));
+			if (!shard.ready) return rej(new Error(`Shard ${shardId} is not ready`));
 			shard.requestGuildMembers(data).then(result => res(result)).catch(e => rej(e as Error));
 		});
 	}

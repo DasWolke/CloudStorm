@@ -1,31 +1,50 @@
 {
   "name": "cloudstorm",
-  "version": "0.17.1",
+  "version": "0.18.0",
   "description": "Minimalistic Discord Gateway library",
   "main": "./dist/index.js",
   "engines": {
     "node": ">=22.0.0"
   },
+  "keywords": [
+    "discord",
+    "api",
+    "gateway",
+    "ws",
+    "microservice",
+    "discord bot",
+    "discord bot microservice",
+    "microservice bot"
+  ],
   "types": "./dist/index.d.ts",
   "scripts": {
     "build:src": "tsup src/index.ts --clean --dts --sourcemap --format cjs --target node22 --minify-whitespace --minify-syntax --treeshake && node ./sourceMapPostProcess.js",
-    "build:docs": "typedoc --name CloudStorm --excludeExternals --sort static-first --sort alphabetical"
+    "build:docs": "typedoc --name CloudStorm --excludeExternals --sort static-first --sort alphabetical",
+    "build": "npm run build:src && npm run build:docs",
+    "lint": "eslint ."
   },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/DasWolke/CloudStorm.git"
+  },
+  "bugs": "https://github.com/DasWolke/CloudStorm/issues",
   "author": "wolke <wolke@weeb.sh>",
   "license": "MIT",
   "dependencies": {
-    "discord-api-types": "^0.38.47",
-    "snowtransfer": "^0.17.5"
+    "discord-api-types": "^0.38.49",
+    "snowtransfer": "^0.18.0"
   },
   "devDependencies": {
-    "@types/node": "^25.9.1",
-    "@typescript-eslint/eslint-plugin": "^8.59.4",
-    "@typescript-eslint/parser": "^8.59.4",
-    "eslint": "^10.4.0",
+    "@eslint/js": "^10.0.1",
+    "@types/node": "^26.0.1",
+    "@typescript-eslint/eslint-plugin": "^8.62.0",
+    "@typescript-eslint/parser": "^8.62.0",
+    "eslint": "^10.5.0",
+    "globals": "^17.7.0",
     "tsup": "^8.5.1",
     "typedoc": "^0.28.19",
     "typedoc-plugin-mdn-links": "^5.1.1",
-    "typescript": "^5.9.3"
+    "typescript": "^6.0.3"
   },
   "files": [
     "dist",

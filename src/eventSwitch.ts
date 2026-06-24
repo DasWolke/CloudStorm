@@ -1,4 +1,4 @@
-import type { EventEmitter } from "events";
+import type { EventEmitter } from "node:events";
 
 /**
  * Call with an emitter and an object of callbacks, and the first event to be emitted will call the callback.
@@ -15,10 +15,10 @@ function eventSwitch(emitter: EventEmitter, cbs: { [eventName: string]: (...args
 				emitter.once(event, l);
 			});
 		}).concat(new Promise<void>((resolve, reject) => {
-			signal?.throwIfAborted()
+			signal?.throwIfAborted();
 			signal?.addEventListener("abort", () => {
-				reject(signal.reason)
-			}, {once: true})
+				reject(signal.reason);
+			}, {once: true});
 		}))
 	).finally(() => {
 		for (const [event, l] of realListeners.entries()) {
