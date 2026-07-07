@@ -1,11 +1,7 @@
 import { EventEmitter } from "node:events";
-import DC = require("./DiscordConnector");
+import DiscordConnector = require("./DiscordConnector");
 
-import type {
-	ShardEvents,
-	ClientEvents,
-	IClientOptions
-} from "./Types";
+import type { ShardEvents } from "./Types";
 
 /**
  * Shard class, which provides a wrapper around the DiscordConnector with metadata like the id of the shard.
@@ -17,17 +13,17 @@ class Shard extends EventEmitter<ShardEvents> {
 	/** If this shard has received the READY or RESUMED payload and isn't disconnected yet. */
 	public ready = false;
 	/** The connector that handles all of the Discord specific connection logic. */
-	public connector: DC;
+	public connector: DiscordConnector;
 
 	/**
 	 * Create a new Shard.
 	 * @param id id of the shard.
 	 * @param client Main class used for forwarding events.
 	 */
-	public constructor(public id: number, public client: EventEmitter<ClientEvents> & { options: Omit<IClientOptions, "snowtransferInstance"> & { token: string; endpoint?: string; } }) {
+	public constructor(public id: number, public client: import("./Client")) {
 		super();
 
-		this.connector = new DC(id, client);
+		this.connector = new DiscordConnector(id, client);
 		this.connector.on("disconnect", (...args) => {
 			this.ready = false;
 			this.emit("disconnect", ...args);
@@ -55,9 +51,10 @@ class Shard extends EventEmitter<ShardEvents> {
 	/**
 	 * Close the current connection to Discord.
 	 * @since 0.1.4
+	 * @param resumable Whether to close with a code that keeps the session alive for a later resume. See DiscordConnector.disconnect.
 	 */
-	public disconnect(): Promise<void> {
-		return this.connector.disconnect();
+	public disconnect(resumable = false): Promise<void> {
+		return this.connector.disconnect(resumable);
 	}
 
 	/**
@@ -85,6 +82,24 @@ class Shard extends EventEmitter<ShardEvents> {
 	 */
 	public requestGuildMembers(data: Parameters<Shard["connector"]["requestGuildMembers"]>["0"]): Promise<void> {
 		return this.connector.requestGuildMembers(data);
+	}
+
+	/**
+	 * Send an OP 31 REQUEST_SOUNDBOARD_SOUNDS to the gateway.
+	 * @since 0.19.0
+	 * @param guilds The guilds to get the soundboard sounds from.
+	 */
+	public requestSoundboardSounds(guilds: Parameters<Shard["connector"]["requestSoundboardSounds"]>["0"]): Promise<void> {
+		return this.connector.requestSoundboardSounds(guilds);
+	}
+
+	/**
+	 * Send an OP 43 REQUEST_CHANNEL_INFO to the gateway.
+	 * @since 0.19.0
+	 * @param data Data to send.
+	 */
+	public requestChannelInfo(data: Parameters<Shard["connector"]["requestChannelInfo"]>["0"]): Promise<void> {
+		return this.connector.requestChannelInfo(data);
 	}
 }
 

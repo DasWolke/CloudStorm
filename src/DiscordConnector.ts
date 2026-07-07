@@ -1,9 +1,9 @@
 import { EventEmitter } from "node:events";
 import BetterWs = require("./BetterWs");
-import { GATEWAY_OP_CODES as OP, GATEWAY_VERSION } from "./Constants";
+import { GATEWAY_OP_CODES as OP, getGatewayAddress } from "./Constants";
 import Intents = require("./Intents");
 
-import { Bucket, IntervalCounter } from "snowtransfer";
+import { Bucket, IntervalCounter, StateMachine, StateMachineGraph as stateMachineGraph, type SMTransition } from "snowtransfer";
 
 import {
 	type GatewayReceivePayload,
@@ -15,15 +15,15 @@ import {
 	type GatewayRequestGuildMembersDataWithUserIds,
 	type GatewaySendPayload,
 
-	PresenceUpdateStatus
+	PresenceUpdateStatus,
+	GatewayRequestChannelInfoData
 } from "discord-api-types/v10";
 
 import type {
 	ConnectorEvents,
-	ClientEvents,
-	IClientOptions,
 	IGatewayMessage,
-	IGatewayDispatch
+	IGatewayDispatch,
+	IShardResumeData
 } from "./Types";
 
 const resumableCodes = new Set([4008, 4005, 4003, 4002, 4001, 4000, 1006, 1001]);
@@ -73,12 +73,14 @@ class DiscordConnector extends EventEmitter<ConnectorEvents> {
 	public lastHeartbeatSend = 0;
 	/** The time in milliseconds it took for Discord to send an op 11 heartbeat ack in response to an op 1 heartbeat */
 	public latency = 0;
-	/** The address the WebSocket will use to connect to the Discord gateway if not resuming */
-	public identifyAddress: string;
 	/** The address the WebSocket will use to connect to the Discord gateway if resuming */
 	public resumeAddress: string | null = null;
-	/** If this connector is disconnected/disconnecting currently, but will reconnect eventually */
-	public reconnecting = false;
+	/**
+	 * Tracks the session lifecycle this connector is in and what operations are allowed.
+	 * States: disconnected, connecting (awaiting HELLO), identifying, resuming, ready,
+	 * closing (user-requested disconnect in flight), reconnecting (deliberate close that will reconnect).
+	 */
+	public sm = new StateMachine("disconnected");
 	/** The ratelimit bucket for how many packets this ws can send within a time frame. */
 	public wsBucket = new Bucket([new IntervalCounter(120, 60000)]);
 	/** The ratelimit bucket for how many presence update specific packets this ws can send within a time frame. Is still affected by the overall packet send bucket. */
@@ -86,44 +88,151 @@ class DiscordConnector extends EventEmitter<ConnectorEvents> {
 	/** The ratelimit bucket for when requesting all guild members from a guild. Is still affected by the overall packet send bucket. */
 	public membersBucket = new Bucket([new IntervalCounter(1, 30000)]);
 
-	/** If this connector is waiting to be fully closed */
-	private _closing = false;
 	/** A Timeout that, when triggered, closes the connection because op HELLO hasn't been received and may never be received */
 	private _openToHeartbeatTimeout: globalThis.NodeJS.Timeout | null = null;
+	/** If an OP 2 IDENTIFY was already sent on the current ws connection and is still authoritative for it */
+	private _identifySent = false;
 	/** A Timeout that, when triggered, sends the first heartbeat */
 	private _initialHeartbeatTimeout: globalThis.NodeJS.Timeout | null = null;
+
+	/**
+	 * The address the WebSocket will use to connect to the Discord gateway if not resuming.
+	 * Always reads the client's current endpoint, so a later Client.fetchConnectInfo() call is picked up by existing shards.
+	 */
+	public get identifyAddress(): string {
+		return this.options.endpoint!;
+	}
+
+	/** If this connector is deliberately closing its connection right now in order to open a new one */
+	public get reconnecting(): boolean {
+		return this.sm.currentStateName === "reconnecting";
+	}
 
 	/**
 	 * Creates a new Discord Connector.
 	 * @param id id of the shard that created this class.
 	 * @param client Main client instance.
 	 */
-	public constructor(public id: number, public client: EventEmitter<ClientEvents> & { options: Omit<IClientOptions, "snowtransferInstance"> & { token: string; endpoint?: string; } }) {
+	public constructor(public id: number, public client: import("./Client")) {
 		super();
 
 		this.options = client.options;
-		this.identifyAddress = this.options.endpoint!;
+
+		// identifying, resuming and ready share these: Discord may invalidate the session or replay at any point after HELLO
+		const sessionTransitions = (): Map<string, SMTransition> => new Map([
+			["identify_started", { destination: "identifying" }],
+			["resume_started", { destination: "resuming" }],
+			["ready_received", { destination: "ready" }],
+			["reconnect_requested", { destination: "reconnecting" }]
+		]);
+
+		this.sm.defineState("disconnected", {
+			onEnter: [],
+			onLeave: [],
+			transitions: new Map([
+				["connect_started", { destination: "connecting" }]
+			])
+		});
+		this.sm.defineState("connecting", {
+			onEnter: [],
+			onLeave: [],
+			transitions: new Map([
+				["identify_started", { destination: "identifying" }],
+				["resume_started", { destination: "resuming" }],
+				["reconnect_requested", { destination: "reconnecting" }]
+			])
+		});
+		this.sm.defineState("identifying", { onEnter: [], onLeave: [], transitions: sessionTransitions() });
+		this.sm.defineState("resuming", { onEnter: [], onLeave: [], transitions: sessionTransitions() });
+		this.sm.defineState("ready", { onEnter: [], onLeave: [], transitions: sessionTransitions() });
+		// Both closing and reconnecting wait for the ws to fully close. Which one the close arrives in decides manual/graceful in handleWsClose
+		this.sm.defineState("closing", {
+			onEnter: [],
+			onLeave: [],
+			transitions: new Map([
+				// connect() while a disconnect is still closing flips the intent: finish the close, then reconnect
+				["connect_started", { destination: "reconnecting" }]
+			])
+		});
+		this.sm.defineState("reconnecting", {
+			onEnter: [],
+			onLeave: [],
+			transitions: new Map([
+				["reconnect_requested", { destination: "reconnecting" }]
+			])
+		});
+		this.sm.defineUniversalTransition("close_requested", "closing");
+		this.sm.defineUniversalTransition("ws_closed", "disconnected");
+		this.sm.freeze();
+
+		if (process.argv.includes("--state-machine-graph-connector")) {
+			console.log(stateMachineGraph.graph(this.sm));
+		}
 
 		this.betterWs = new BetterWs(this.identifyAddress, this.options.ws!);
 
 		this.betterWs.on("ws_open", () => {
-			this.status = "connecting";
-			this.emit("stateChange", "connecting");
-			this.reconnecting = false;
+			this._setStatus("connecting");
 			this._openToHeartbeatTimeout = setTimeout(() => {
 				this.client.emit("debug", `Shard ${this.id} didn't receive a HELLO after the ws was opened in time`);
-				this._reconnect(true);
+				this._reconnect();
 			}, 10000);
 		});
-		this.betterWs.on("ws_receive", msg => this.messageAction(msg));
+		// A throw out of this listener (e.g. from a user's "dispatch" listener) would land in the socket's
+		// read loop, which treats it as malformed wire data and tears the connection down
+		this.betterWs.on("ws_receive", msg => {
+			try {
+				this.messageAction(msg);
+			} catch (e) {
+				this._clientError(e instanceof Error ? e : new Error(String(e)));
+			}
+		});
 		this.betterWs.on<"ws_close">("ws_close", (code, reason) => this.handleWsClose(code, reason));
 		this.betterWs.on("debug", event => this.client.emit("debug", `Shard ${this.id} ${event}`));
-		this.betterWs.on("error", event => this.client.emit("error", event));
+		this.betterWs.on("error", event => this._clientError(event));
 		this.betterWs.on("ws_send", data => this.client.emit("rawSend", data));
 
+		this._pauseBuckets();
+	}
+
+	/**
+	 * Emit an error on the client if anyone listens for them, otherwise degrade to a debug event.
+	 * "error" with zero listeners throws by EventEmitter contract, and the connector emits from socket,
+	 * timer and bucket contexts where that throw would crash the process instead of reaching user code.
+	 * @since 0.19.0
+	 */
+	private _clientError(error: Error): void {
+		if (this.client.listenerCount("error")) this.client.emit("error", error);
+		else this.client.emit("debug", `Shard ${this.id} unlistened error: ${error.message}`);
+	}
+
+	/**
+	 * Set the status of this connector and notify listeners about the change.
+	 * @since 0.19.0
+	 */
+	private _setStatus(status: DiscordConnector["status"]): void {
+		this.status = status;
+		this.emit("stateChange", status);
+	}
+
+	/**
+	 * Pause all send ratelimit buckets, queueing further messages until resumed.
+	 * @since 0.19.0
+	 */
+	private _pauseBuckets(): void {
 		this.wsBucket.pause();
 		this.presenceBucket.pause();
 		this.membersBucket.pause();
+	}
+
+	/**
+	 * Resume all send ratelimit buckets.
+	 * @since 0.19.0
+	 */
+	private _resumeBuckets(): void {
+		this.wsBucket.resume();
+		this.presenceBucket.resume();
+		this.membersBucket.resume();
 	}
 
 	/**
@@ -131,25 +240,57 @@ class DiscordConnector extends EventEmitter<ConnectorEvents> {
 	 * @since 0.1.4
 	 */
 	public async connect(): Promise<void> {
-		this._closing = false;
+		const state = this.sm.currentStateName;
+		if (state !== "disconnected" && state !== "closing") return;
 		this.client.emit("debug", `Shard ${this.id} connecting to gateway`);
-		// The address should already be updated if resuming/identifying
+		this.sm.doTransition("connect_started");
+		this.betterWs.address = this.sessionId && this.resumeAddress ? this.resumeAddress : this.identifyAddress;
 		return this.betterWs.connect();
+	}
+
+	/**
+	 * Snapshot of everything needed to resume this shard's session, e.g. in another process.
+	 * Only meaningful after the session was established and the connection wasn't closed with a
+	 * session-destroying code (1000/1001) - see disconnect(resumable).
+	 * @since 0.19.0
+	 * @returns The resume data, or null if there is no session to resume.
+	 */
+	public getResumeData(): IShardResumeData | null {
+		if (!this.sessionId) return null;
+		return {
+			sessionId: this.sessionId,
+			seq: this.seq,
+			resumeAddress: this.resumeAddress
+		};
+	}
+
+	/**
+	 * Seed this connector with resume data from a previous process, making the next connect
+	 * resume the session instead of identifying. If Discord no longer accepts the session,
+	 * the connector falls back to identifying automatically via INVALID_SESSION.
+	 * @since 0.19.0
+	 * @param data Resume data as returned by getResumeData().
+	 */
+	public seedResumeData(data: IShardResumeData): void {
+		this.sessionId = data.sessionId ?? null;
+		this.seq = data.seq ?? 0;
+		this.resumeAddress = data.resumeAddress ?? null;
 	}
 
 	/**
 	 * Close the websocket connection and disconnect.
 	 * @since 0.1.4
+	 * @param resumable Whether to close with a code that keeps the session alive on Discord's end,
+	 * so it can be resumed later - also from another process via getResumeData()/seeded resume data.
+	 * The default close code 1000 destroys the session.
 	 */
-	public async disconnect(): Promise<void> {
-		this._closing = true;
-		this.wsBucket.pause();
-		this.presenceBucket.pause();
-		this.membersBucket.pause();
+	public async disconnect(resumable = false): Promise<void> {
+		this._pauseBuckets();
 		this.clearHeartBeat();
-		const state = this.betterWs.sm.currentStateName;
-		if (state !== "connected" && state !== "half_close") return;
-		return this.betterWs.close(1000, "Disconnected by User");
+		if (this.betterWs.sm.currentStateName === "disconnected") return;
+		this.sm.doTransition("close_requested");
+		// also cancels a connect still waiting/in flight
+		return this.betterWs.close(resumable ? 4000 : 1000, resumable ? "Disconnecting with intent to resume" : "Disconnected by User");
 	}
 
 	/**
@@ -157,7 +298,7 @@ class DiscordConnector extends EventEmitter<ConnectorEvents> {
 	 * @since 0.1.4
 	 * @param message Message that was received.
 	 */
-	private async messageAction(message: GatewayReceivePayload): Promise<void> {
+	private messageAction(message: GatewayReceivePayload): void {
 		this.client.emit("rawReceive", message);
 		const withShardID: IGatewayMessage = Object.assign(message, { shard_id: this.id });
 		this.client.emit("event", withShardID);
@@ -173,7 +314,7 @@ class DiscordConnector extends EventEmitter<ConnectorEvents> {
 
 		case OP.RECONNECT:
 			this.client.emit("debug", `Gateway asked shard ${this.id} to reconnect`);
-			this._reconnect(true);
+			this._reconnect();
 			break;
 
 		case OP.INVALID_SESSION:
@@ -182,6 +323,7 @@ class DiscordConnector extends EventEmitter<ConnectorEvents> {
 			else {
 				this.seq = 0;
 				this.sessionId = null;
+				this._identifySent = false; // Discord explicitly wants a fresh identify on this same connection
 				this.emit("queueIdentify", this.id);
 			}
 			break;
@@ -208,36 +350,17 @@ class DiscordConnector extends EventEmitter<ConnectorEvents> {
 	}
 
 	/**
-	 * Reset this connector to be ready to resume or hard reconnect, then connect.
+	 * Deliberately close the connection with a resumable code, then reconnect and resume the session.
+	 * If the session turns out to not be resumable, the INVALID_SESSION flow falls back to identifying.
 	 * @since 0.3.0
-	 * @param resume Whether or not the client intends to send an OP 6 RESUME later.
 	 */
-	private async _reconnect(resume = false): Promise<void> {
+	private async _reconnect(): Promise<void> {
+		if (this.sm.currentStateName === "closing") return; // a user-requested disconnect wins over automatic reconnects
 		const state = this.betterWs.sm.currentStateName;
 		if (state !== "connected" && state !== "half_close") return;
-		this.reconnecting = resume;
-		this.wsBucket.pause();
-		this.presenceBucket.pause();
-		await this.betterWs.close(resume ? 4000 : 1012, "reconnecting");
-		if (resume) {
-			this.clearHeartBeat();
-			if (this.resumeAddress) this.betterWs.address = this.resumeAddress;
-			else this.betterWs.address = this.identifyAddress;
-		} else {
-			this.reset();
-			this.betterWs.address = this.identifyAddress;
-		}
-	}
-
-	/**
-	 * Hard reset this connector.
-	 * @since 0.1.4
-	 */
-	private reset(): void {
-		this.sessionId = null;
-		this.seq = 0;
-		this.lastACKAt = 0;
-		this._trace = null;
+		this.sm.doTransition("reconnect_requested");
+		this._pauseBuckets();
+		await this.betterWs.close(4000, "reconnecting");
 		this.clearHeartBeat();
 	}
 
@@ -249,7 +372,7 @@ class DiscordConnector extends EventEmitter<ConnectorEvents> {
 		this.heartbeatTimeout = setInterval(() => {
 			if (this.lastACKAt <= Date.now() - (this.heartbeatInterval + 5000)) {
 				this.client.emit("debug", `Shard ${this.id} has not received a heartbeat ACK in ${this.heartbeatInterval + 5000}ms.`);
-				this._reconnect(true);
+				this._reconnect();
 			} else this.heartbeat();
 		}, this.heartbeatInterval);
 	}
@@ -274,13 +397,20 @@ class DiscordConnector extends EventEmitter<ConnectorEvents> {
 	 */
 	public async identify(): Promise<void> {
 		if (this.betterWs.sm.currentStateName !== "connected") {
-			this.client.emit("error", new Error(`Shard ${this.id} was attempting to identify when the ws was not open. Current state: ${this.betterWs.sm.currentStateName}`));
-			return this._reconnect(true);
+			this._clientError(new Error(`Shard ${this.id} was attempting to identify when the ws was not open. Current state: ${this.betterWs.sm.currentStateName}`));
+			return this._reconnect();
 		}
+		if (this._identifySent) {
+			// A stale queued identify from before a reconnect. The identify already sent on this connection
+			// is the authoritative one; sending a second would get the session closed with a 4005
+			this.client.emit("debug", `Shard ${this.id} skipped a duplicate identify on the same connection`);
+			return;
+		}
+		this._identifySent = true;
 		this.client.emit("debug", `Shard ${this.id} is identifying`);
 
-		this.status = "identifying";
-		this.emit("stateChange", "identifying");
+		this.sm.doTransition("identify_started");
+		this._setStatus("identifying");
 
 		const data = {
 			op: OP.IDENTIFY,
@@ -307,13 +437,13 @@ class DiscordConnector extends EventEmitter<ConnectorEvents> {
 	 */
 	public async resume(): Promise<void> {
 		if (this.betterWs.sm.currentStateName !== "connected") {
-			this.client.emit("error", new Error(`Shard ${this.id} was attempting to resume when the ws was not open. Current state: ${this.betterWs.sm.currentStateName}`));
-			return this._reconnect(true);
+			this._clientError(new Error(`Shard ${this.id} was attempting to resume when the ws was not open. Current state: ${this.betterWs.sm.currentStateName}`));
+			return this._reconnect();
 		}
 		this.client.emit("debug", `Shard ${this.id} is resuming`);
 
-		this.status = "resuming";
-		this.emit("stateChange", "resuming");
+		this.sm.doTransition("resume_started");
+		this._setStatus("resuming");
 
 		return this.betterWs.sendMessage({
 			op: OP.RESUME,
@@ -326,10 +456,11 @@ class DiscordConnector extends EventEmitter<ConnectorEvents> {
 	 * @since 0.1.4
 	 */
 	private heartbeat(): void {
-		if (this.betterWs.sm.currentStateName === "user_close") return;
-		if (this.betterWs.sm.currentStateName !== "connected") {
-			this.client.emit("error", new Error(`Shard ${this.id} was attempting to heartbeat when the ws was not open. Current state: ${this.betterWs.sm.currentStateName}`));
-			return void this._reconnect(true);
+		const state = this.betterWs.sm.currentStateName;
+		if (state === "half_close") return; // a close is already in flight. Don't heartbeat into it or treat it as a dead connection
+		if (state !== "connected") {
+			this._clientError(new Error(`Shard ${this.id} was attempting to heartbeat when the ws was not open. Current state: ${state}`));
+			return void this._reconnect();
 		}
 		this.betterWs.sendMessage({ op: OP.HEARTBEAT, d: this.seq === 0 ? null : this.seq });
 		this.lastHeartbeatSend = Date.now();
@@ -337,7 +468,7 @@ class DiscordConnector extends EventEmitter<ConnectorEvents> {
 			clearTimeout(this._initialHeartbeatTimeout);
 			this._initialHeartbeatTimeout = null;
 		}
-		if (!this.heartbeatTimeout) this.setHeartBeat();
+		if (!this.heartbeatTimeout && this.heartbeatInterval > 0) this.setHeartBeat();
 	}
 
 	/**
@@ -346,31 +477,38 @@ class DiscordConnector extends EventEmitter<ConnectorEvents> {
 	 * @param message Message received from the websocket.
 	 */
 	private handleDispatch(message: IGatewayDispatch): void {
-		this.client.emit("dispatch", message);
-
 		if (message.s) { // sequence is from dispatch
 			if (message.s > this.seq + 1) {
 				this.client.emit("debug", `Shard ${this.id} invalid sequence: { current: ${this.seq} message: ${message.s} }`);
-				this.seq = message.s;
-				this.resume();
+				this._reconnect();
+				return;
 			}
 			this.seq = message.s;
 		}
+
+		this.client.emit("dispatch", message);
+
 		switch (message.t) {
 		case "READY":
-		case "RESUMED":
+		case "RESUMED": {
 			if (message.t === "READY") {
-				if (message.d.resume_gateway_url) this.resumeAddress = `${message.d.resume_gateway_url}?v=${GATEWAY_VERSION}&encoding=${this.options.ws?.encoding === "etf" ? "etf" : "json"}${this.options.ws?.compress ? "&compress=zlib-stream" : ""}`;
+				if (message.d.resume_gateway_url) this.resumeAddress = getGatewayAddress(message.d.resume_gateway_url, this.options.ws);
 				this.sessionId = message.d.session_id;
 			}
-			this.status = "ready";
-			this.emit("stateChange", "ready");
+			const state = this.sm.currentStateName;
+			if (state === "closing" || state === "reconnecting") {
+				// The READY/RESUMED crossed a deliberate close still in flight. The connection is on its way down;
+				// announcing ready would flip the status and buckets back on mid-teardown
+				this.client.emit("debug", `Shard ${this.id} received ${message.t} while ${state} and won't announce ready`);
+				break;
+			}
+			this.sm.doTransition("ready_received");
+			this._setStatus("ready");
 			this._trace = (message.d as unknown as { _trace: string })._trace;
 			this.emit("ready", message.t === "RESUMED");
-			this.wsBucket.resume();
-			this.presenceBucket.resume();
-			this.membersBucket.resume();
+			this._resumeBuckets();
 			break;
+		}
 		default:
 			void 0;
 		}
@@ -383,29 +521,43 @@ class DiscordConnector extends EventEmitter<ConnectorEvents> {
 	 * @param reason Close reason if any.
 	 */
 	private handleWsClose(code: number, reason: string): void {
-		let gracefulClose = false;
-		this.status = "disconnected";
-		this.emit("stateChange", "disconnected");
-		this.clearHeartBeat();
-		this.wsBucket.pause();
-		this.presenceBucket.pause();
+		// Which state the close arrived in carries the intent: "closing" means the user asked for this
+		// (even if the server echoed a code other than 1000 or never answered and this is the 1006 fallback),
+		// "reconnecting" means the lib closed on purpose and will reopen.
+		const stateBeforeClose = this.sm.currentStateName;
+		this.sm.doTransition("ws_closed");
 
-		const isManualClose = code === 1000 && this._closing;
+		this._setStatus("disconnected");
+		this.clearHeartBeat();
+		this._pauseBuckets();
+		this._identifySent = false; // whatever identify happened belonged to the connection that just died
+
+		const isManualClose = stateBeforeClose === "closing";
+		const gracefulClose = isManualClose || stateBeforeClose === "reconnecting";
 
 		const message = disconnectMessages[code as keyof typeof disconnectMessages];
 		const isRecoverable = resumableCodes.has(code);
 		const shouldntReconnect = shouldntAttemptReconnectCodes.has(code) || isManualClose;
 
-		if (isRecoverable && this.resumeAddress) this.betterWs.address = this.resumeAddress;
-		else this.betterWs.address = this.identifyAddress;
+		// The session only survives closures Discord considers resumable. Keeping it would make the next connection
+		// attempt a doomed resume (e.g. after 4007/4009), wasting a round trip on INVALID_SESSION before identifying.
+		// connect() picks the resume or identify address based on whether a session remains.
+		if (!isRecoverable) {
+			this.sessionId = null;
+			this.seq = 0;
+		}
 
-		if (message) this.client.emit("error", new Error(message));
+		if (message) {
+			const error = new Error(message);
+			// A code that stops reconnection leaves a permanently dead shard only a human can fix.
+			// With no error listener, crashing is the only way that human finds out.
+			if (!this.client.listenerCount("error") && shouldntAttemptReconnectCodes.has(code)) queueMicrotask(() => {
+				throw error;
+			});
+			else this._clientError(error);
+		}
 
-		if (isManualClose || this.reconnecting) gracefulClose = true;
-
-		this._closing = false;
-
-		this.emit("disconnect", code, reason, gracefulClose);
+		this.emit("disconnect", code, reason, gracefulClose, isManualClose);
 
 		if (!shouldntReconnect) this.connect();
 	}
@@ -425,7 +577,6 @@ class DiscordConnector extends EventEmitter<ConnectorEvents> {
 	 * @param data Voice state update data to send.
 	 */
 	public async voiceStateUpdate(data: GatewayVoiceStateUpdateData & { self_deaf?: boolean; self_mute?: boolean; }): Promise<void> {
-		if (!data) return;
 		return this.sendMessage({ op: OP.VOICE_STATE_UPDATE, d: this._checkVoiceStateUpdateData(data) });
 	}
 
@@ -439,6 +590,24 @@ class DiscordConnector extends EventEmitter<ConnectorEvents> {
 	}
 
 	/**
+	 * Send an OP 31 REQUEST_SOUNDBOARD_SOUNDS to the gateway.
+	 * @since 0.19.0
+	 * @param guilds The guilds to get the soundboard sounds from.
+	 */
+	public async requestSoundboardSounds(guilds: Array<string>): Promise<void> {
+		return this.sendMessage({ op: OP.REQUEST_SOUNDBOARD_SOUNDS, d: { guild_ids: guilds } });
+	}
+
+	/**
+	 * Send an OP 43 REQUEST_CHANNEL_INFO to the gateway.
+	 * @since 0.19.0
+	 * @param data Data to send.
+	 */
+	public async requestChannelInfo(data: GatewayRequestChannelInfoData): Promise<void> {
+		return this.sendMessage({ op: OP.REQUEST_CHANNEL_INFO, d: data });
+	}
+
+	/**
 	 * Sends a message to the server in the format of { op: number, d: any } (before any encoding/compression).
 	 * @since 0.12.0
 	 * @param data Packet to send to Discord.
@@ -446,11 +615,15 @@ class DiscordConnector extends EventEmitter<ConnectorEvents> {
 	 */
 	public async sendMessage(data: GatewaySendPayload): Promise<void> {
 		const bypass = this.options.ws!.bypassBuckets;
-		return new Promise<void>(res => {
+		return new Promise<void>((res, rej) => {
 			const sendMsg = async () => {
 				const fn = async () => {
-					this.betterWs.sendMessage(data);
-					res(void 0);
+					try {
+						this.betterWs.sendMessage(data);
+						res(void 0);
+					} catch (e) {
+						rej(e instanceof Error ? e : new Error(String(e)));
+					}
 				};
 				if (bypass) fn();
 				else this.wsBucket.enqueue(fn);
@@ -474,57 +647,53 @@ class DiscordConnector extends EventEmitter<ConnectorEvents> {
 	}
 
 	/**
-	 * Checks presence data and fills in missing elements.
+	 * Checks presence data and fills in missing elements without touching the caller's object.
 	 * @since 0.1.4
 	 * @param data Data to send.
-	 * @returns Data after it's fixed/checked.
+	 * @returns A new object with the fixed/checked data.
 	 */
 	private _checkPresenceData(data: Parameters<DiscordConnector["presenceUpdate"]>["0"]): GatewayPresenceUpdateData {
-		data.status = data.status ?? PresenceUpdateStatus.Online;
-		data.activities = data.activities && Array.isArray(data.activities) ? data.activities : [];
+		const activities = (Array.isArray(data.activities) ? data.activities : [])
+			.map(activity => ({ ...activity, type: activity.type ?? (activity.url ? 1 : 0) }))
+			.map(activity => !activity.name && activity.state && activity.type === 4
+				? { ...activity, name: "Custom Status" } // Discord requires name to not be empty even on custom status
+				: activity)
+			.filter(activity => activity.name);
 
-		if (data.activities) {
-			for (let index = data.activities.length - 1; index >= 0; index--) {
-				const activity = data.activities[index];
-				activity.type ??= activity.url ? 1 : 0;
-				if (!activity.name) {
-					if (activity.state && activity.type === 4) activity.name = "Custom Status"; // Discord requires name to not be empty even on custom status
-					else data.activities.splice(index, 1);
-				}
-			}
-		}
-
-		data.afk = data.afk ?? false;
-		data.since = data.since ?? Date.now();
-		return data as GatewayPresenceUpdateData;
+		return {
+			status: data.status ?? PresenceUpdateStatus.Online,
+			activities,
+			afk: data.afk ?? false,
+			since: data.since ?? null
+		};
 	}
 
 	/**
-	 * Checks voice state update data and fills in missing elements.
+	 * Checks voice state update data and fills in missing elements without touching the caller's object.
 	 * @since 0.1.4
 	 * @param data Data to send.
-	 * @returns Data after it's fixed/checked.
+	 * @returns A new object with the fixed/checked data.
 	 */
 	private _checkVoiceStateUpdateData(data: Parameters<DiscordConnector["voiceStateUpdate"]>["0"]): GatewayVoiceStateUpdateData {
-		data.channel_id = data.channel_id ?? null;
-		data.self_mute = data.self_mute ?? false;
-		data.self_deaf = data.self_deaf ?? false;
-		return data;
+		return {
+			...data,
+			channel_id: data.channel_id ?? null,
+			self_mute: data.self_mute ?? false,
+			self_deaf: data.self_deaf ?? false
+		};
 	}
 
 	/**
-	 * Checks request guild members data and fills in missing elements.
+	 * Checks request guild members data and fills in missing elements without touching the caller's object.
 	 * @since 0.1.4
 	 * @param data Data to send.
-	 * @returns Data after it's fixed/checked.
+	 * @returns A new object with the fixed/checked data.
 	 */
 	private _checkRequestGuildMembersData(data: Parameters<DiscordConnector["requestGuildMembers"]>["0"]): GatewayRequestGuildMembersData {
-		const withQuery = data as GatewayRequestGuildMembersDataWithQuery;
-		const withUserIDs = data as GatewayRequestGuildMembersDataWithUserIds;
-		if (!withQuery.query && !withUserIDs.user_ids) withQuery.query = "";
-		if (withQuery.query && withUserIDs.user_ids) delete (data as { query?: string; }).query; // the intention may be to get users by ID
-		data.limit = data.limit ?? 10;
-		return data;
+		const copy = { ...data, limit: data.limit ?? 10 } as GatewayRequestGuildMembersDataWithQuery & Partial<GatewayRequestGuildMembersDataWithUserIds>;
+		if (!copy.query && !copy.user_ids) copy.query = "";
+		else if (copy.query && copy.user_ids) delete (copy as { query?: string; }).query; // the intention may be to get users by ID
+		return copy;
 	}
 }
 

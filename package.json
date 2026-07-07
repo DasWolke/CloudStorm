@@ -1,6 +1,6 @@
 {
   "name": "cloudstorm",
-  "version": "0.18.0",
+  "version": "0.19.0",
   "description": "Minimalistic Discord Gateway library",
   "main": "./dist/index.js",
   "engines": {
@@ -18,10 +18,12 @@
   ],
   "types": "./dist/index.d.ts",
   "scripts": {
-    "build:src": "tsup src/index.ts --clean --dts --sourcemap --format cjs --target node22 --minify-whitespace --minify-syntax --treeshake && node ./sourceMapPostProcess.js",
+    "build:src": "tsc -p .",
     "build:docs": "typedoc --name CloudStorm --excludeExternals --sort static-first --sort alphabetical",
     "build": "npm run build:src && npm run build:docs",
-    "lint": "eslint ."
+    "lint": "eslint .",
+    "test": "npm run build:src && node --test --test-timeout=30000 --test-force-exit \"test/**/*.test.js\"",
+    "test:live": "npm run build:src && node --test --test-timeout=90000 --test-force-exit test/live.js"
   },
   "repository": {
     "type": "git",
@@ -32,17 +34,16 @@
   "license": "MIT",
   "dependencies": {
     "discord-api-types": "^0.38.49",
-    "snowtransfer": "^0.18.0"
+    "snowtransfer": "^0.19.0"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
-    "@types/node": "^26.0.1",
-    "@typescript-eslint/eslint-plugin": "^8.62.0",
-    "@typescript-eslint/parser": "^8.62.0",
-    "eslint": "^10.5.0",
+    "@types/node": "^26.1.0",
+    "@typescript-eslint/eslint-plugin": "^8.63.0",
+    "@typescript-eslint/parser": "^8.63.0",
+    "eslint": "^10.6.0",
     "globals": "^17.7.0",
-    "tsup": "^8.5.1",
-    "typedoc": "^0.28.19",
+    "typedoc": "^0.28.20",
     "typedoc-plugin-mdn-links": "^5.1.1",
     "typescript": "^6.0.3"
   },

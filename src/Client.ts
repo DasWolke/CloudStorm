@@ -1,7 +1,3 @@
-import fs = require("node:fs");
-import path = require("node:path");
-
-const version = JSON.parse(fs.readFileSync(path.join(__dirname, "../package.json"), { encoding: "utf8" })).version as string;
 import { EventEmitter } from "node:events";
 import Constants = require("./Constants");
 import { SnowTransfer, Bucket, IntervalCounter } from "snowtransfer";
@@ -10,7 +6,8 @@ import type { APIGatewayBotInfo } from "discord-api-types/v10";
 
 import type {
 	ClientEvents,
-	IClientOptions
+	IClientOptions,
+	IShardResumeData
 } from "./Types";
 
 /**
@@ -25,7 +22,7 @@ class Client extends EventEmitter<ClientEvents> {
 	/** The manager of all of the shards used to connect to Discord. */
 	public shardManager: ShardManager;
 	/** The version string of CloudStorm. */
-	public version = version;
+	public version = Constants.VERSION;
 	/** The SnowTransfer instance to use to make some requests to get connect info. */
 	private readonly _restClient: SnowTransfer;
 
@@ -37,23 +34,21 @@ class Client extends EventEmitter<ClientEvents> {
 	public constructor(token: string, options: IClientOptions = {}) {
 		super();
 		if (!token) throw new Error("Missing token!");
+		const { snowtransferInstance, ws, ...rest } = options;
+		this._restClient = snowtransferInstance ?? new SnowTransfer(token);
+		this.token = token.startsWith("Bot ") ? token.substring(4) : token;
 		this.options = {
 			largeGuildThreshold: 250,
 			shards: "auto",
 			intents: 0,
-			token: "",
+			...rest,
+			token,
 			ws: {
 				compress: true,
-				encoding: "json"
+				encoding: "json",
+				...ws
 			}
 		};
-		this._restClient = options.snowtransferInstance ?? new SnowTransfer(token);
-		delete options.snowtransferInstance;
-		this.token = token.startsWith("Bot ") ? token.substring(4) : token;
-		if (options.ws) Object.assign(this.options.ws!, options.ws);
-		delete options.ws;
-		Object.assign(this.options, options);
-		this.options.token = token;
 		this.shardManager = new ShardManager(this);
 	}
 
@@ -79,7 +74,7 @@ class Client extends EventEmitter<ClientEvents> {
 		const gateway = await this.getGatewayBot();
 		this._updateEndpoint(gateway.url);
 		this.shardManager.identifyBucket.counters[0].applyCount(null, gateway.session_start_limit.remaining, gateway.session_start_limit.reset_after);
-		if (this.shardManager.identifyBucket.counters[0].take()) this.shardManager.identifyBucket.resume();
+		if (this.shardManager.identifyBucket.counters[0].canTake()) this.shardManager.identifyBucket.resume(); // canTake, not take: probing must not consume an identify slot
 		for (const route of Object.keys(this.shardManager.concurrencyBuckets)) {
 			delete this.shardManager.concurrencyBuckets[route];
 		}
@@ -112,9 +107,37 @@ class Client extends EventEmitter<ClientEvents> {
 	 * Disconnect the bot gracefully,
 	 * you will receive a 'disconnected' event once the ShardManager successfully closes all shard websocket connections.
 	 * @since 0.1.4
+	 * @param resumable Whether to close with a code that keeps the sessions alive on Discord's end, so another
+	 * process can resume them via getResumeData() and the resumeData client option. The default close destroys them.
 	 */
-	public disconnect(): void {
-		return this.shardManager.disconnect();
+	public disconnect(resumable = false): void {
+		return this.shardManager.disconnect(resumable);
+	}
+
+	/**
+	 * Collect everything needed to resume all shards' sessions after a process restart, keyed by shard id.
+	 * Resuming doesn't count against the daily identify limit and replays the events missed while disconnected.
+	 *
+	 * Take the snapshot AFTER disconnecting with client.disconnect(true) - a regular disconnect destroys the sessions,
+	 * and a snapshot taken while still connected can go stale as more events arrive if they get processed.
+	 * Shards whose sessions Discord no longer accepts fall back to identifying automatically.
+	 * The returned object is JSON-serializable as-is.
+	 * @since 0.19.0
+	 *
+	 * @example
+	 * // Before shutting down:
+	 * client.once("disconnected", () => {
+	 * 	fs.writeFileSync("./resume.json", JSON.stringify(client.getResumeData()));
+	 * 	process.exit(0);
+	 * });
+	 * client.disconnect(true);
+	 *
+	 * // After restarting:
+	 * const client = new CloudStorm.Client(token, { resumeData: JSON.parse(fs.readFileSync("./resume.json", "utf8")) });
+	 * client.connect();
+	 */
+	public getResumeData(): Record<number, IShardResumeData> {
+		return this.shardManager.getResumeData();
 	}
 
 	/**
@@ -203,8 +226,51 @@ class Client extends EventEmitter<ClientEvents> {
 	 * });
 	 */
 	public async requestGuildMembers(shardId: number, data: Parameters<Client["shardManager"]["requestGuildMembers"]>["1"]): Promise<void> {
-		if (!data.guild_id) throw new Error("You need to pass a guild_id");
 		return this.shardManager.requestGuildMembers(shardId, data);
+	}
+
+	/**
+	 * Send an OP 31 REQUEST_SOUNDBOARD_SOUNDS to Discord.
+	 * @param shardId id of the shard that should send the payload.
+	 * @param guilds Guild ids to request soundboard sounds from.
+	 * @returns Promise that's resolved once the payload was send to Discord.
+	 *
+	 * @example
+	 * // Connect to Discord and request soundboard sounds.
+	 * const CloudStorm = require("cloudstorm"); // CloudStorm also supports import statements.
+	 * const token = "token";
+	 * const client = new CloudStorm.Client(token);
+	 * client.connect();
+	 * client.once("ready", () => {
+	 * 	// Client is connected to Discord and is ready, so we can send the request soundboard sounds payload.
+	 * 	// We will use shard 0 as the shard to send the payload.
+	 * 	client.requestSoundboardSounds(0, ["id"]);
+	 * });
+	 */
+	public async requestSoundboardSounds(shardId: number, guilds: Parameters<Client["shardManager"]["requestSoundboardSounds"]>["1"]): Promise<void> {
+		return this.shardManager.requestSoundboardSounds(shardId, guilds);
+	}
+
+	/**
+	 * Send an OP 43 REQUEST_CHANNEL_INFO to Discord.
+	 * @param shardId id of the shard that should send the payload.
+	 * @param data Request channel info data to send.
+	 * @returns Promise that's resolved once the payload was send to Discord.
+	 *
+	 * @example
+	 * // Connect to Discord and request channel info.
+	 * const CloudStorm = require("cloudstorm"); // CloudStorm also supports import statements.
+	 * const token = "token";
+	 * const client = new CloudStorm.Client(token);
+	 * client.connect();
+	 * client.once("ready", () => {
+	 * 	// Client is connected to Discord and is ready, so we can send the request channel info payload.
+	 * 	// We will use shard 0 as the shard to send the payload.
+	 * 	client.requestChannelInfo(0, ["id"]);
+	 * });
+	 */
+	public async requestChannelInfo(shardId: number, data: Parameters<Client["shardManager"]["requestChannelInfo"]>["1"]): Promise<void> {
+		return this.shardManager.requestChannelInfo(shardId, data);
 	}
 
 	/**
@@ -213,7 +279,7 @@ class Client extends EventEmitter<ClientEvents> {
 	 * @param gatewayUrl Base gateway wss url to update the cached endpoint to.
 	 */
 	private _updateEndpoint(gatewayUrl: string): void {
-		this.options.endpoint = `${gatewayUrl}?v=${Constants.GATEWAY_VERSION}&encoding=${this.options.ws?.encoding === "etf" ? "etf" : "json"}${this.options.ws?.compress ? "&compress=zlib-stream" : ""}`;
+		this.options.endpoint = Constants.getGatewayAddress(gatewayUrl, this.options.ws);
 	}
 }
 

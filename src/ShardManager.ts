@@ -1,12 +1,7 @@
-import type { EventEmitter } from "node:events";
-
 import Shard = require("./Shard");
 import { Bucket, IntervalCounter } from "snowtransfer";
 
-import {
-	IClientOptions,
-	ClientEvents
-} from "./Types";
+import { IShardResumeData } from "./Types";
 
 /**
  * Class used for managing shards for the user.
@@ -27,7 +22,7 @@ class ShardManager {
 	/**
 	 * Create a new ShardManager.
 	 */
-	public constructor(public client: EventEmitter<ClientEvents> & { options: Omit<IClientOptions, "snowtransferInstance"> & { token: string; endpoint?: string; } }) {
+	public constructor(public client: import("./Client")) {
 		this.options = client.options;
 	}
 
@@ -37,9 +32,14 @@ class ShardManager {
 	 */
 	public spawn(): void {
 		if (!Object.keys(this.concurrencyBuckets).length) throw new Error("Trying to spawn shards without calling Client.fetchConnectInfo()\nIf you intended to just let cloudstorm handle things for you, you should just use Client.connect() instead");
-		for (const id of (this.options.shards === "auto" ? new Array(this.options.totalShards).fill(0).map((_, index) => index) : this.options.shards ?? [0])) {
+		for (const id of (this.options.shards === "auto" ? Array.from({ length: this.options.totalShards ?? 1 }, (_, index) => index) : this.options.shards ?? [0])) {
 			this.client.emit("debug", `Spawned shard ${id}`);
 			this.shards[id] = new Shard(id, this.client);
+			const resume = this.options.resumeData?.[id];
+			if (resume?.sessionId) {
+				this.client.emit("debug", `Shard ${id} was seeded with resume data and will try to resume session ${resume.sessionId}`);
+				this.shards[id].connector.seedResumeData(resume);
+			}
 			this._addListener(this.shards[id]);
 			this.shards[id].connector.connect();
 		}
@@ -48,11 +48,25 @@ class ShardManager {
 	/**
 	 * Disconnect all shards facilitated by this manager.
 	 * @since 0.1.4
+	 * @param resumable Whether to close with a code that keeps the sessions alive for a later resume. See DiscordConnector.disconnect.
 	 */
-	public disconnect(): void {
-		for (const shardKey in this.shards) {
-			this.shards[shardKey].disconnect();
+	public disconnect(resumable = false): void {
+		for (const shard of Object.values(this.shards)) {
+			shard.disconnect(resumable);
 		}
+	}
+
+	/**
+	 * Collect the resume data of every shard that has a session to resume, keyed by shard id.
+	 * @since 0.19.0
+	 */
+	public getResumeData(): Record<number, IShardResumeData> {
+		const data: Record<number, IShardResumeData> = {};
+		for (const shard of Object.values(this.shards)) {
+			const resume = shard.connector.getResumeData();
+			if (resume) data[shard.id] = resume;
+		}
+		return data;
 	}
 
 	/**
@@ -70,18 +84,25 @@ class ShardManager {
 		shard.on("queueIdentify", (shardId) => {
 			this.client.emit("debug", `Shard ${shardId} is ready to identify`);
 			this.identifyBucket.enqueue(async () => {
-				const max_concurrency = Object.keys(this.concurrencyBuckets!).length;
+				const max_concurrency = Object.keys(this.concurrencyBuckets).length;
 				const concurrencyRoute = shardId % max_concurrency;
 				const bkt = this.concurrencyBuckets[concurrencyRoute];
-				if (!bkt) return this.client.emit("error", new Error(`Received a queueIdentify event for shard ${shardId} and a concurrency route of ${concurrencyRoute} with a max_concurrency of ${max_concurrency}, but there was no bucket with that route internally.`));
+				if (!bkt) {
+					const error = new Error(`Received a queueIdentify event for shard ${shardId} and a concurrency route of ${concurrencyRoute} with a max_concurrency of ${max_concurrency}, but there was no bucket with that route internally.`);
+					if (this.client.listenerCount("error")) this.client.emit("error", error);
+					else this.client.emit("debug", error.message);
+					return;
+				}
 				bkt.enqueue(async () => {
 					shard.connector.identify();
 				});
 			});
 		});
-		shard.on("disconnect", (code, reason, gracefulClose) => {
+		shard.on("disconnect", (code, reason, gracefulClose, manual) => {
 			this.client.emit("debug", `Websocket of shard ${shard.id} closed with code ${code} and reason: ${reason ?? "None"}`);
-			if (code === 1000 && gracefulClose) return this._checkDisconnect();
+			// Only user-requested disconnects count towards the "disconnected" event. gracefulClose alone
+			// also covers internal reconnects, which pass through disconnected for only a moment.
+			if (manual) return this._checkDisconnect();
 		});
 	}
 
@@ -90,12 +111,7 @@ class ShardManager {
 	 * @since 0.1.4
 	 */
 	private _checkReady(): void {
-		for (const shardId in this.shards) {
-			if (this.shards[shardId]) {
-				if (!this.shards[shardId].ready) return;
-			}
-		}
-		this.client.emit("ready");
+		if (Object.values(this.shards).every(shard => shard.ready)) this.client.emit("ready");
 	}
 
 	/**
@@ -103,12 +119,20 @@ class ShardManager {
 	 * @since 0.1.4
 	 */
 	private _checkDisconnect(): void {
-		for (const shardId in this.shards) {
-			if (this.shards[shardId]) {
-				if (this.shards[shardId].connector.status !== "disconnected") return;
-			}
-		}
-		this.client.emit("disconnected");
+		if (Object.values(this.shards).every(shard => shard.connector.status === "disconnected")) this.client.emit("disconnected");
+	}
+
+	/**
+	 * Look up a shard by id, ensure it can send, and run an action with it.
+	 * @since 0.19.0
+	 * @param shardId id of the shard.
+	 * @param action What to do with the shard.
+	 */
+	private _withReadyShard<T>(shardId: number, action: (shard: Shard) => Promise<T>): Promise<T> {
+		const shard = this.shards[shardId];
+		if (!shard) return Promise.reject(new Error(`Shard ${shardId} does not exist`));
+		if (!shard.ready) return Promise.reject(new Error(`Shard ${shardId} is not ready`));
+		return action(shard);
 	}
 
 	/**
@@ -117,12 +141,8 @@ class ShardManager {
 	 * @param data Data to send.
 	 */
 	public async presenceUpdate(data: Parameters<Shard["presenceUpdate"]>["0"]): Promise<void> {
-		for (const shardKey in this.shards) {
-			if (this.shards[shardKey]) {
-				const shard = this.shards[shardKey];
-				this.shardPresenceUpdate(shard.id, data);
-			}
-		}
+		// Collected with Promise.all so a not-ready shard rejects this promise instead of floating as an unhandled rejection
+		await Promise.all(Object.values(this.shards).map(shard => this.shardPresenceUpdate(shard.id, data)));
 	}
 
 	/**
@@ -132,12 +152,7 @@ class ShardManager {
 	 * @param data Data to send.
 	 */
 	public shardPresenceUpdate(shardId: number, data: Parameters<Shard["presenceUpdate"]>["0"]): Promise<void> {
-		return new Promise((res, rej) => {
-			const shard = this.shards[shardId];
-			if (!shard) return rej(new Error(`Shard ${shardId} does not exist`));
-			if (!shard.ready) return rej(new Error(`Shard ${shardId} is not ready`));
-			shard.presenceUpdate(data).then(result => res(result)).catch(e => rej(e as Error));
-		});
+		return this._withReadyShard(shardId, shard => shard.presenceUpdate(data));
 	}
 
 	/**
@@ -147,12 +162,7 @@ class ShardManager {
 	 * @param data Data to send.
 	 */
 	public voiceStateUpdate(shardId: number, data: Parameters<Shard["voiceStateUpdate"]>["0"]): Promise<void> {
-		return new Promise((res, rej) => {
-			const shard = this.shards[shardId];
-			if (!shard) return rej(new Error(`Shard ${shardId} does not exist`));
-			if (!shard.ready) return rej(new Error(`Shard ${shardId} is not ready`));
-			shard.voiceStateUpdate(data).then(result => res(result)).catch(e => rej(e as Error));
-		});
+		return this._withReadyShard(shardId, shard => shard.voiceStateUpdate(data));
 	}
 
 	/**
@@ -162,12 +172,27 @@ class ShardManager {
 	 * @param data Data to send.
 	 */
 	public requestGuildMembers(shardId: number, data: Parameters<Shard["requestGuildMembers"]>["0"]): Promise<void> {
-		return new Promise((res, rej) => {
-			const shard = this.shards[shardId];
-			if (!shard) return rej(new Error(`Shard ${shardId} does not exist`));
-			if (!shard.ready) return rej(new Error(`Shard ${shardId} is not ready`));
-			shard.requestGuildMembers(data).then(result => res(result)).catch(e => rej(e as Error));
-		});
+		return this._withReadyShard(shardId, shard => shard.requestGuildMembers(data));
+	}
+
+	/**
+	 * Send an OP 31 REQUEST_SOUNDBOARD_SOUNDS with a certain shard.
+	 * @since 0.19.0
+	 * @param shardId id of the shard.
+	 * @param guilds The guilds to get the soundboard sounds from.
+	 */
+	public requestSoundboardSounds(shardId: number, guilds: Parameters<Shard["requestSoundboardSounds"]>["0"]): Promise<void> {
+		return this._withReadyShard(shardId, shard => shard.requestSoundboardSounds(guilds));
+	}
+
+	/**
+	 * Send an OP 43 REQUEST_CHANNEL_INFO with a certain shard.
+	 * @since 0.19.0
+	 * @param shardId id of the shard.
+	 * @param data Data to send.
+	 */
+	public requestChannelInfo(shardId: number, data: Parameters<Shard["requestChannelInfo"]>["0"]): Promise<void> {
+		return this._withReadyShard(shardId, shard => shard.requestChannelInfo(data));
 	}
 }
 

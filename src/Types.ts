@@ -31,7 +31,26 @@ export type IClientOptions = {
 	initialPresence?: GatewayPresenceUpdateData;
 	intents?: IntentResolvable;
 	snowtransferInstance?: SnowTransfer;
+	/**
+	 * Resume data as exported by Client.getResumeData() from a previous process, keyed by shard id.
+	 * Seeded shards resume their sessions instead of identifying, which doesn't count against the identify limit.
+	 * Shards whose sessions Discord no longer accepts (too old, shard config changed) fall back to identifying automatically.
+	 */
+	resumeData?: Record<number, IShardResumeData>;
 	ws?: IClientWSOptions;
+}
+
+/**
+ * Everything needed to resume one shard's gateway session, e.g. in another process after a restart.
+ * JSON-serializable, so it can be written to a file or any other store as-is.
+ */
+export type IShardResumeData = {
+	/** The id of the session that can be resumed. */
+	sessionId: string;
+	/** The last sequence number processed in the session. Discord replays everything after it on resume. */
+	seq: number;
+	/** The gateway address the session must be resumed at, as assigned by Discord in READY. */
+	resumeAddress: string | null;
 }
 
 export type IClientWSOptions = {
@@ -68,12 +87,14 @@ export type ClientEvents = {
 export type ConnectorEvents = {
 	queueIdentify: [number];
 	ready: [boolean];
-	disconnect: [number, string, boolean];
+	/** close code, close reason, gracefulClose (the close was deliberate, including internal reconnects), manual (the user requested this disconnect) */
+	disconnect: [number, string, boolean, boolean];
 	stateChange: ["connecting" | "identifying" | "resuming" | "ready" | "disconnected"]
 }
 
 export type ShardEvents = {
-	disconnect: [number, string, boolean];
+	/** close code, close reason, gracefulClose (the close was deliberate, including internal reconnects), manual (the user requested this disconnect) */
+	disconnect: [number, string, boolean, boolean];
 	ready: [boolean];
 	queueIdentify: [number];
 }

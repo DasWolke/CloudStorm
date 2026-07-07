@@ -1,13 +1,13 @@
-import Client2 = require("./Client");
+import Client = require("./Client");
 import Constants = require("./Constants");
 import Intents = require("./Intents");
 
-import Shard2 = require("./Shard");
-import ShardManager2 = require("./ShardManager");
+import Shard = require("./Shard");
+import ShardManager = require("./ShardManager");
 
-import BetterWs2 = require("./BetterWs");
-import DiscordConnector2 = require("./DiscordConnector");
-import eventSwitch2 = require("./eventSwitch");
+import BetterWs = require("./BetterWs");
+import DiscordConnector = require("./DiscordConnector");
+import eventSwitch = require("./eventSwitch");
 
-export { BetterWs2 as BetterWs, DiscordConnector2 as DiscordConnector, Client2 as Client, Constants, Intents, Shard2 as Shard, ShardManager2 as ShardManager, eventSwitch2 as eventSwitch };
+export { BetterWs, DiscordConnector, Client, Constants, Intents, Shard, ShardManager, eventSwitch };
 export * from "./Types";
