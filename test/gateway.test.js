@@ -9,13 +9,14 @@
 
 const { test } = require("node:test");
 const assert = require("node:assert/strict");
-const { EventEmitter } = require("node:events");
+const { EventEmitter, once } = require("node:events");
 const { spawn } = require("node:child_process");
 const path = require("node:path");
+const { deflateSync, constants } = require("node:zlib");
 
 const { PresenceUpdateStatus } = require("discord-api-types/v10");
 
-const { BetterWs, Client, DiscordConnector, Shard, ShardManager } = require("../dist/index.js");
+const { BetterWs, Client, DiscordConnector, Intents, Shard, ShardManager } = require("../dist/index.js");
 const { startGateway, waitFor, sleep, connectorEnv, connectAndReady } = require("./mockgateway.js");
 
 /**
@@ -98,6 +99,25 @@ test("a malformed frame emits an error and recycles the connection instead of cr
 	assert.equal(resume.op, 6, "the teardown looks like a 1006 to the connector, which keeps the session and resumes");
 });
 
+test("a zlib error recycles the connection instead of crashing the process or leaving it wedged", async t => {
+	// Node re-emits a failed inflate's error asynchronously. With no listener left on the stream that is an unhandled 'error' that kills the process.
+	const env = await connectorEnv(t, { compress: true });
+	const { conn } = await connectAndReady(env);
+
+	const errorsBefore = env.client.errors.length;
+	const reconnectP = waitFor(env.gw, "connection");
+	conn.sendRaw(2, Buffer.from([0xde, 0xad, 0xbe, 0xef, 0, 0, 0xff, 0xff])); // bad zlib header, valid sync flush suffix
+
+	const [conn2] = await reconnectP; // a hang here means the dead inflate context kept the connection "open"
+	await sleep(50); // room for the async re-emit
+	assert.ok(env.client.errors.length > errorsBefore, "the inflate failure must surface as an error event");
+
+	const resumeP = waitFor(conn2, "message");
+	conn2.sendJSON({ op: 10, d: { heartbeat_interval: 45000 } });
+	const [resume] = await resumeP;
+	assert.equal(resume.op, 6, "a broken compression context is a transport failure, the session survives");
+});
+
 test("a manual disconnect sticks even when the server never acknowledges the close", async t => {
 	const env = await connectorEnv(t, { connectThrottle: 50 });
 	const { conn } = await connectAndReady(env);
@@ -120,6 +140,7 @@ test("a manual disconnect sticks even when the server never acknowledges the clo
 	assert.equal(newConnections, 0, "a manual close must never auto-reconnect");
 	assert.equal(env.connector.status, "disconnected");
 	assert.equal(env.connector.sm.currentStateName, "disconnected");
+	assert.equal(env.connector.getResumeData(), null, "the 1000 that was sent ended the session, even though the close reads as a resumable 1006");
 });
 
 test("disconnect cancels a connect attempt that has not finished upgrading", async t => {
@@ -196,16 +217,43 @@ test("OP 7 RECONNECT closes resumable and resumes the session", async t => {
 	assert.equal(resume.d.session_id, "sess-test");
 });
 
-test("INVALID_SESSION d=false discards the session and identifies fresh on the same connection", async t => {
+test("INVALID_SESSION d=false discards the session and identifies fresh on the same connection after Discord's wait", async t => {
+	// Discord asks for a random 1-5s wait. Re-identifying instantly can chain invalid sessions while Discord is struggling.
 	const env = await connectorEnv(t);
 	const { conn } = await connectAndReady(env);
+	t.mock.method(Math, "random", () => 0); // the shortest allowed wait: 1s
 
-	const reidentifyP = waitFor(conn, "message");
+	/** @type {Array<any>} */
+	const sent = [];
+	conn.on("message", message => {
+		if (message.op !== 1) sent.push(message); // a heartbeat landing in this window is irrelevant
+	});
 	conn.sendJSON({ op: 9, d: false });
-	const [reidentify] = await reidentifyP;
-	assert.equal(reidentify.op, 2, "an unresumable session must lead to a new IDENTIFY, not a RESUME");
+	await sleep(800);
+	assert.deepEqual(sent, [], "nothing may be sent before the wait is over");
 	assert.equal(env.connector.sessionId, null);
 	assert.equal(env.connector.seq, 0);
+	await sleep(400);
+	assert.equal(sent.length, 1);
+	assert.equal(sent[0].op, 2, "an unresumable session must lead to a new IDENTIFY, not a RESUME");
+});
+
+test("a second INVALID_SESSION during Discord's wait replaces the pending retry instead of stacking a second one", async t => {
+	// Two stacked timers would each RESUME/IDENTIFY. A second IDENTIFY on one connection is a 4005 close.
+	const env = await connectorEnv(t);
+	const { conn } = await connectAndReady(env);
+	t.mock.method(Math, "random", () => 0); // the shortest allowed wait: 1s
+
+	/** @type {Array<any>} */
+	const sent = [];
+	conn.on("message", message => {
+		if (message.op !== 1) sent.push(message);
+	});
+	conn.sendJSON({ op: 9, d: true });
+	await sleep(300);
+	conn.sendJSON({ op: 9, d: true });
+	await sleep(1500);
+	assert.deepEqual(sent.map(message => message.op), [6], "exactly one RESUME, sent after the latest invalidation's wait");
 });
 
 test("an OP 1 heartbeat request is answered immediately with the current sequence", async t => {
@@ -219,102 +267,96 @@ test("an OP 1 heartbeat request is answered immediately with the current sequenc
 	assert.equal(heartbeat.d, 1, "the heartbeat must report the last processed seq");
 });
 
-test("ETF payloads larger than the initial write buffer arrive whole", async t => {
-	// writeETF starts with a 4KB buffer; payloads past it used to be silently truncated into
-	// corrupt frames (or throw), surfacing as mysterious 4002 closes from Discord.
-	const gw = await startGateway();
-	const ws = new BetterWs(gw.url, { encoding: "etf", compress: false, connectThrottle: 50 });
-	ws.on("error", () => void 0); // teardown resets are irrelevant to this test
-	t.after(async () => {
-		const closed = ws.close(1000).catch(() => void 0);
-		gw.close();
-		await closed;
-	});
-	const connP = waitFor(gw, "connection");
-	ws.connect();
-	const [conn] = await connP;
-	await waitFor(ws, "ws_open");
+for (const encoding of /** @type {const} */ (["json", "etf"])) {
+	test(`${encoding} hands back the same values for the same payload through a real socket`, async t => {
+		// Devs shouldn't have to branch on encoding, so both modes produce the same object for anything Discord accepts.
+		// wetf's defaults would turn strings into byte arrays, arrays into tuples and [] into null.
+		const gw = await startGateway();
+		const ws = new BetterWs(gw.url, { encoding, compress: false, connectThrottle: 50 });
+		ws.on("error", () => void 0); // teardown resets are irrelevant to this test
+		t.after(async () => {
+			const closed = ws.close(1000).catch(() => void 0);
+			gw.close();
+			await closed;
+		});
+		const connP = waitFor(gw, "connection");
+		ws.connect();
+		/** @type {[UnpackArray<import("./mockgateway.js").MockGateway["conns"]>]} */
+		// @ts-expect-error Trust
+		const [conn] = await connP;
+		await waitFor(ws, "ws_open");
+		conn.on("frame",
+			/**
+			 * @param {number} opcode
+			 * @param {Buffer} payload
+			 */
+			(opcode, payload) => conn.sendRaw(opcode, payload)); // echo the raw bytes back
 
-	/** @type {Promise<[number, Buffer]>} */
-	// @ts-expect-error Trust
-	const frameP = waitFor(conn, "frame");
-	ws.sendMessage({ op: 1, d: "x".repeat(8000) });
-	const [opcode, payload] = await frameP;
-	assert.equal(opcode, 2, "etf frames are binary");
-	assert.equal(payload[0], 131, "etf payloads start with the version byte");
-	const xBytes = payload.filter(b => b === 120).length;
-	assert.ok(xBytes >= 8000, `all 8000 payload bytes must survive, found ${xBytes}`);
-});
+		const receiveP = waitFor(ws, "ws_receive");
+		ws.sendMessage({
+			op: 3,
+			d: {
+				content: "héllo 世界 🎉",
+				// Strings under 15 bytes take wetf's hand-rolled decoder, which broke every emoji on npm 0.9.14
+				emoji: "👍",
+				flag: true,
+				off: false,
+				nothing: null,
+				float: 2.5,
+				int: -1234,
+				big_int: 1099511627776,
+				nan: NaN,
+				list: [1, "two", false],
+				empty_list: [],
+				nested: { deep: "value" },
+				dropped: undefined,
+				sparse_list: [1, undefined, 2]
+			}
+		});
+		const [packet] = await receiveP;
+		assert.deepEqual(packet, {
+			op: 3,
+			d: {
+				content: "héllo 世界 🎉",
+				emoji: "👍",
+				flag: true,
+				off: false,
+				nothing: null,
+				float: 2.5,
+				int: -1234,
+				big_int: 1099511627776,
+				nan: null,
+				list: [1, "two", false],
+				empty_list: [],
+				nested: { deep: "value" },
+				// wetf can only drop undefined from arrays, not null it like json. Discord rejects either
+				sparse_list: encoding === "json" ? [1, null, 2] : [1, 2]
+			}
+		});
+		if (encoding !== "etf") return;
 
-test("ETF encode and decode agree through a real socket", async t => {
-	// Pins the encoder/decoder contract, including the parts that are NOT identity:
-	// integers beyond int32 and bigints decode as strings (how snowflakes stay precise).
-	const gw = await startGateway();
-	const ws = new BetterWs(gw.url, { encoding: "etf", compress: false, connectThrottle: 50 });
-	ws.on("error", () => void 0); // teardown resets are irrelevant to this test
-	t.after(async () => {
-		const closed = ws.close(1000).catch(() => void 0);
-		gw.close();
-		await closed;
+		// What Erlang's term_to_binary sends that our packer never produces: small int lists as STRING_EXT (READY's shard: [0, 1]),
+		// [] as NIL_EXT and ints past int32 as SMALL_BIG_EXT. json has snowflakes as strings and ms timestamps as numbers
+		const bin = (/** @type {string} */ s) => [109, 0, 0, 0, s.length, ...Buffer.from(s)];
+		const smallBig = (/** @type {bigint} */ n) => {
+			const bytes = [];
+			for (; n; n >>= 8n) {
+				bytes.push(Number(n & 255n));
+			}
+			return [110, bytes.length, 0, ...bytes];
+		};
+		const erlangP = waitFor(ws, "ws_receive");
+		conn.sendRaw(2, Buffer.from([
+			131, 116, 0, 0, 0, 4,
+			...bin("shard"), 107, 0, 2, 0, 1,
+			...bin("guilds"), 106,
+			...bin("id"), ...smallBig(378773803225841668n),
+			...bin("created_at"), ...smallBig(1761700000000n)
+		]));
+		const [erlang] = await erlangP;
+		assert.deepEqual(erlang, { shard: [0, 1], guilds: [], id: "378773803225841668", created_at: 1761700000000 });
 	});
-	const connP = waitFor(gw, "connection");
-	ws.connect();
-	/** @type {[UnpackArray<import("./mockgateway.js").MockGateway["conns"]>]} */
-	// @ts-expect-error Trust
-	const [conn] = await connP;
-	await waitFor(ws, "ws_open");
-	conn.on("frame",
-		/**
-		 * @param {number} opcode
-		 * @param {Buffer} payload
-		 */
-		(opcode, payload) => conn.sendRaw(opcode, payload)); // echo the raw etf bytes back
-
-	const receiveP = waitFor(ws, "ws_receive");
-	ws.sendMessage({
-		op: 3,
-		d: {
-			content: "héllo 世界 🎉",
-			flag: true,
-			off: false,
-			nothing: null,
-			float: 2.5,
-			int: -1234,
-			big_int: 1099511627776,
-			snowflake: 378773803225841668n,
-			negative_big: -5n,
-			list: [1, "two", false],
-			nested: { deep: "value" },
-			dropped: undefined,
-			dropped_fn: () => void 0,
-			// A skipped array element would desync the decoder from the list's length prefix,
-			// corrupting everything in the payload after it - not just this list
-			sparse_list: [1, undefined, () => void 0, 2],
-			after_the_list: "must survive"
-		}
-	});
-	const [packet] = await receiveP;
-	assert.deepEqual(packet, {
-		op: 3,
-		d: {
-			content: "héllo 世界 🎉",
-			flag: true,
-			off: false,
-			nothing: null,
-			float: 2.5,
-			int: -1234,
-			big_int: "1099511627776",
-			snowflake: "378773803225841668",
-			negative_big: "-5",
-			list: [1, "two", false],
-			nested: { deep: "value" },
-			// `dropped`/`dropped_fn` are omitted entirely and unencodable array elements
-			// become null, like JSON.stringify would
-			sparse_list: [1, null, null, 2],
-			after_the_list: "must survive"
-		}
-	});
-});
+}
 
 test("a socket error on a BetterWs without error listeners still completes the teardown", async t => {
 	// emit("error") with zero listeners throws by EventEmitter contract. If that throw escapes inside the
@@ -338,6 +380,39 @@ test("a socket error on a BetterWs without error listeners still completes the t
 	assert.equal(code, 1006);
 	assert.equal(ws.sm.currentStateName, "disconnected");
 	await ws.close(1000); // must be an instant no-op on a fully torn down socket, not a hang
+});
+
+test("a throwing ws_receive listener on a standalone BetterWs does not cost the connection", async t => {
+	// The throw used to land in the socket read loop, which reads it as malformed wire data and tears the connection down
+	const gw = await startGateway();
+	const ws = new BetterWs(gw.url, { encoding: "json", compress: false, connectThrottle: 50 });
+	/** @type {Array<Error>} */
+	const errors = [];
+	ws.on("error", e => errors.push(e));
+	t.after(async () => {
+		const closed = ws.close(1000).catch(() => void 0);
+		gw.close();
+		await closed;
+	});
+
+	const connP = waitFor(gw, "connection");
+	ws.connect();
+	/** @type {[UnpackArray<import("./mockgateway.js").MockGateway["conns"]>]} */
+	// @ts-expect-error Trust
+	const [conn] = await connP;
+	await waitFor(ws, "ws_open");
+
+	ws.once("ws_receive", () => {
+		throw new Error("user listener exploded");
+	});
+	conn.sendJSON({ n: 1 });
+	await sleep(50);
+	const secondP = waitFor(ws, "ws_receive");
+	conn.sendJSON({ n: 2 });
+	const [second] = await secondP;
+	assert.deepEqual(second, { n: 2 });
+	assert.equal(ws.sm.currentStateName, "connected");
+	assert.deepEqual(errors.map(e => e.message), ["user listener exploded"], "the throw is handed to the error listener");
 });
 
 test("ShardManager.presenceUpdate rejects catchably when a shard is not ready", async t => {
@@ -379,6 +454,10 @@ test("fetchConnectInfo applies Discord's session limits without spending an iden
 	// @ts-expect-error Counter is a default interface. It's actually an IntervalCounter which does have remaining
 	assert.equal(client.shardManager.identifyBucket.counters[0].remaining, 1);
 	assert.equal(Object.keys(client.shardManager.concurrencyBuckets).length, 2, "one concurrency bucket per max_concurrency route");
+
+	const route0 = client.shardManager.concurrencyBuckets[0];
+	await client.fetchConnectInfo();
+	assert.equal(client.shardManager.concurrencyBuckets[0], route0, "a refresh must keep the buckets: a new one forgets the 5s window an identify just used");
 });
 
 test("resume data survives a process restart: export after a resumable disconnect, seed, resume without identifying", async t => {
@@ -529,6 +608,76 @@ test("a stale queued identify from before a reconnect never double-identifies th
 	assert.equal(identifies.length, 1, "exactly one IDENTIFY may go out per connection");
 });
 
+test("a stale queued identify never lands on top of a resume", async t => {
+	// A queued identify can outlive the connection it was queued for. If the shard resumed on a new
+	// connection in the meantime, identifying on top of the RESUME gets the session closed with a 4005.
+	const env = await connectorEnv(t);
+	const { conn: conn1 } = await connectAndReady(env);
+
+	const conn2P = waitFor(env.gw, "connection", 8000);
+	conn1.socket.destroy(); // 1006 keeps the session resumable
+	/** @type {[UnpackArray<import("./mockgateway.js").MockGateway["conns"]>]} */
+	// @ts-expect-error Trust
+	const [conn2] = await conn2P;
+	const resumeP = waitFor(conn2, "message");
+	conn2.sendJSON({ op: 10, d: { heartbeat_interval: 45000 } });
+	const [resume] = await resumeP;
+	assert.equal(resume.op, 6);
+
+	/** @type {Array<any>} */
+	const identifies = [];
+	conn2.on("message", message => {
+		if (message.op === 2) identifies.push(message);
+	});
+	env.connector.identify(); // the stale job finally getting its turn in the identify bucket
+	await sleep(100); // let the frames cross the socket
+	assert.deepEqual(identifies, [], "a connection authenticated by RESUME must not also IDENTIFY");
+});
+
+test("connecting twice reuses the spawned shards instead of orphaning live duplicates", async t => {
+	// A replaced shard keeps its connection and session alive with nothing tracking it: duplicate sessions and every event twice
+	const gw = await startGateway();
+	t.after(() => gw.close());
+	/** @type {import("snowtransfer").SnowTransfer} */
+	const stub = {
+		// @ts-expect-error
+		bot: {
+			getGatewayBot: async () => ({
+				url: gw.url,
+				shards: 1,
+				session_start_limit: { total: 1000, remaining: 500, reset_after: 86400000, max_concurrency: 1 }
+			})
+		}
+	};
+	const client = new Client("TESTTOKEN", { snowtransferInstance: stub, ws: { encoding: "json", compress: false, connectThrottle: 50 } });
+	client.on("error", () => void 0);
+	t.after(() => client.disconnect());
+
+	const connP = waitFor(gw, "connection");
+	await client.connect();
+	await connP;
+	const shard = client.shardManager.shards[0];
+	await client.connect();
+	await sleep(200); // a duplicate would be connecting by now
+	assert.equal(client.shardManager.shards[0], shard, "the live shard must not be replaced");
+	assert.equal(gw.conns.length, 1, "a second connect must not open a second gateway connection");
+});
+
+test("disconnect reports disconnected even when no shard had a connection to close", async () => {
+	// Shards dead from a fatal close code (or never connected) never report back. Waiting on "disconnected"
+	// before exiting, as the getResumeData docs show, would hang forever.
+	/** @type {import("../dist").Client} */
+	// @ts-expect-error Trust
+	const client = new EventEmitter();
+	client.options = { token: "TESTTOKEN", endpoint: "ws://127.0.0.1:1/", intents: 0, largeGuildThreshold: 250, totalShards: 1, shards: "auto", ws: { encoding: "json", compress: false } };
+	const manager = new ShardManager(client);
+	manager.shards[0] = new Shard(0, client); // never connected: the same states a fatal close leaves behind
+
+	const disconnectedP = waitFor(client, "disconnected", 1000);
+	manager.disconnect();
+	await disconnectedP;
+});
+
 test("close() called from inside a ws_open listener still resolves only once fully closed", async t => {
 	// ws_open is emitted from within a state transition, so a close() requested there has its
 	// user_close transition queued. The returned promise must still track the actual teardown.
@@ -607,6 +756,30 @@ test("a throwing dispatch listener on a client with no error listener does not c
 	conn.sendJSON({ op: 0, t: "SOMETHING_CREATE", s: 3, d: {} });
 	await aliveP;
 	assert.equal(connector.seq, 3, "the shard must keep processing events after the user listener threw");
+});
+
+test("a listener throwing on the READY dispatch still lets the shard finish becoming ready", async t => {
+	// The throw used to unwind out of the dispatch emit before the lib's own READY bookkeeping: no session id,
+	// buckets paused forever, status stuck on identifying, while heartbeats kept the dead shard looking alive.
+	const env = await connectorEnv(t);
+	const connP = waitFor(env.gw, "connection");
+	env.connector.connect();
+	/** @type {[UnpackArray<import("./mockgateway.js").MockGateway["conns"]>]} */
+	// @ts-expect-error Trust
+	const [conn] = await connP;
+	const identifyP = waitFor(conn, "message");
+	conn.sendJSON({ op: 10, d: { heartbeat_interval: 45000 } });
+	await identifyP;
+
+	env.client.once("dispatch", () => {
+		throw new Error("user listener exploded");
+	});
+	const readyP = waitFor(env.connector, "ready");
+	conn.sendJSON({ op: 0, t: "READY", s: 1, d: { session_id: "sess-test", resume_gateway_url: env.gw.url, user: {}, guilds: [] } });
+	await readyP;
+	assert.equal(env.connector.sessionId, "sess-test");
+	assert.equal(env.connector.status, "ready");
+	assert.ok(env.client.errors.some(e => e.message === "user listener exploded"), "the user's throw is handed to their error listener");
 });
 
 test("payload check methods fill defaults into the sent payload without mutating the caller's objects", async t => {
@@ -702,4 +875,238 @@ test("the Client constructor merges options without mutating the caller's object
 	assert.equal(client.options.ws.compress, true, "unspecified ws options keep their defaults");
 	assert.equal(client.token, "TESTTOKEN", "Client.token is the bare token");
 	assert.equal(client.options.token, "Bot TESTTOKEN", "options.token keeps what the caller passed for the gateway");
+});
+
+test("explicitly undefined Client options still get their defaults", async () => {
+	// ws.encoding undefined used to spread over "json" and put BetterWs in raw "other" mode: HELLO never parses, silent reconnect loop
+	const stub = { bot: { getGatewayBot: async () => ({}) } };
+	/** @type {import("../dist").IClientOptions} */
+	// @ts-expect-error Trust
+	const userOptions = { snowtransferInstance: stub, shards: undefined, intents: undefined, ws: { encoding: undefined, compress: undefined } };
+	const client = new Client("TESTTOKEN", userOptions);
+
+	assert.equal(client.options.shards, "auto");
+	assert.equal(client.options.intents, 0);
+	// @ts-expect-error Its defined
+	assert.equal(client.options.ws.encoding, "json");
+	// @ts-expect-error Its defined
+	assert.equal(client.options.ws.compress, true);
+});
+
+test("the ws send bucket counts over a sliding minute instead of refilling all at once", t => {
+	// A window that refills fully when it ends lets a burst just before and just after that edge send ~2x Discord's 120/60s, which is a 4008 close
+	/** @type {import("../dist").Client} */
+	// @ts-expect-error Trust
+	const client = new EventEmitter();
+	client.options = { token: "TESTTOKEN", endpoint: "ws://127.0.0.1:1/", intents: 0, largeGuildThreshold: 250, totalShards: 1, shards: "auto", ws: { encoding: "json", compress: false } };
+	const counter = new DiscordConnector(0, client).wsBucket.counters[0];
+	let now = 1000000;
+	t.mock.method(Date, "now", () => now);
+
+	counter.take();
+	now += 59000;
+	let burst = 1;
+	while (counter.canTake()) {
+		counter.take();
+		burst++;
+	}
+	assert.ok(burst <= 120, "one minute may never hold more than Discord's limit");
+
+	now += 2000; // only the very first send has aged out of the trailing minute
+	let after = 0;
+	while (counter.canTake()) {
+		counter.take();
+		after++;
+	}
+	assert.equal(after, 1);
+	assert.equal(counter.timeUntilReset(), 58000, "the next slot opens when the burst ages out");
+});
+
+test("a frame announcing more than maxPayload recycles the connection instead of crashing the process", async t => {
+	// Node throws on a socket.read() above 1GiB. From inside the readable handler that is an uncaught exception no error listener can stop
+	const env = await connectorEnv(t);
+	const { conn } = await connectAndReady(env);
+
+	const errorsBefore = env.client.errors.length;
+	const reconnectP = waitFor(env.gw, "connection");
+	conn.socket.write(Buffer.from([0x82, 127, 0, 0, 0, 0, 0x80, 0, 0, 0])); // a binary frame header claiming 2GiB of payload
+
+	await reconnectP;
+	assert.ok(env.client.errors.slice(errorsBefore).some(e => /maxPayload/.test(e.message)), "the refusal must surface as an error event");
+});
+
+test("a compressed frame that inflates past maxPayload is refused instead of being inflated into memory", async t => {
+	const env = await connectorEnv(t, { compress: true, maxPayload: 1024 * 1024 });
+	const { conn } = await connectAndReady(env);
+
+	const errorsBefore = env.client.errors.length;
+	const reconnectP = waitFor(env.gw, "connection");
+	conn.sendRaw(2, deflateSync(Buffer.alloc(8 * 1024 * 1024), { finishFlush: constants.Z_SYNC_FLUSH })); // 8MiB of zeros in about 8KB
+
+	await reconnectP;
+	// @ts-expect-error cause is unknown, but this one is node's zlib error
+	assert.ok(env.client.errors.slice(errorsBefore).some(e => e.cause?.code === "ERR_BUFFER_TOO_LARGE"), "the inflate must stop at the limit");
+});
+
+test("a message split into fragments arrives once and whole, with a ping in between still answered", async t => {
+	// Parsing every fragment as its own message fails on the first one and recycles the connection, forever, against any server that splits large messages
+	const gw = await startGateway();
+	const ws = new BetterWs(gw.url, { encoding: "json", compress: false, connectThrottle: 50 });
+	t.after(async () => {
+		const closed = ws.close(1000).catch(() => void 0);
+		gw.close();
+		await closed;
+	});
+
+	const connP = waitFor(gw, "connection");
+	ws.connect();
+	/** @type {[UnpackArray<import("./mockgateway.js").MockGateway["conns"]>]} */
+	// @ts-expect-error Trust
+	const [conn] = await connP;
+	await waitFor(ws, "ws_open");
+
+	/**
+	 * @param {number} firstByte fin bit and opcode
+	 * @param {string} text
+	 */
+	const frame = (firstByte, text) => Buffer.concat([Buffer.from([firstByte, text.length]), Buffer.from(text)]);
+	const receivedP = waitFor(ws, "ws_receive");
+	const pongP = waitFor(conn, "frame");
+	conn.socket.write(Buffer.concat([
+		frame(0x01, "{\"n\":"), // text, more to come
+		frame(0x89, "hi"), // control frames may sit between fragments
+		frame(0x00, "[1,"), // continuation, more to come
+		frame(0x80, "2]}") // final continuation
+	]));
+
+	const [message] = await receivedP;
+	assert.deepEqual(message, { n: [1, 2] });
+	const [opcode, payload] = await pongP;
+	assert.equal(opcode, 10, "the ping must not be swallowed into the message");
+	assert.equal(payload.toString(), "hi");
+	assert.equal(ws.sm.currentStateName, "connected");
+});
+
+test("an address that is not a URL fails the connect like any other error instead of wedging the socket", async () => {
+	// The throw used to escape the state machine mid transition: connect() threw and the state stayed "connecting", where a later connect() does nothing
+	const ws = new BetterWs("not a url", { encoding: "json", compress: false, connectThrottle: 50 });
+	/** @type {Array<Error>} */
+	const errors = [];
+	ws.on("error", e => errors.push(e));
+	const closedP = waitFor(ws, "ws_close");
+	ws.connect();
+	await closedP;
+	assert.equal(errors.length, 1);
+	assert.equal(ws.sm.currentStateName, "disconnected", "a later connect() with a fixed address must be possible");
+});
+
+test("repeated close() calls do not keep postponing the no-response fallback", async t => {
+	// Every close() used to restart the 5s timer. A shard that keeps asking, like one seeing gapped dispatches from a server ignoring the close, never timed out
+	const gw = await startGateway();
+	const ws = new BetterWs(gw.url, { encoding: "json", compress: false, connectThrottle: 50 });
+	t.after(() => gw.close());
+	ws.connect();
+	await waitFor(ws, "ws_open");
+
+	t.mock.timers.enable({ apis: ["setTimeout"] });
+	const closed = ws.close(4000);
+	t.mock.timers.tick(3000);
+	ws.close(4000).catch(() => void 0);
+	t.mock.timers.tick(2500);
+	assert.equal(ws.sm.currentStateName, "disconnected", "5.5s after the first close the fallback must have fired");
+	await closed;
+});
+
+test("a server that starts the close and never hangs up still ends in ws_close", async t => {
+	// The client echoed the close and then waited for the server to drop the connection, forever if it never did
+	const gw = await startGateway();
+	const ws = new BetterWs(gw.url, { encoding: "json", compress: false, connectThrottle: 50 });
+	t.after(() => gw.close());
+
+	const connP = waitFor(gw, "connection");
+	ws.connect();
+	/** @type {[UnpackArray<import("./mockgateway.js").MockGateway["conns"]>]} */
+	// @ts-expect-error Trust
+	const [conn] = await connP;
+	await waitFor(ws, "ws_open");
+
+	// once() instead of waitFor(): the timers are mocked from here on
+	const echoP = once(conn, "closeframe");
+	const closedP = once(ws, "ws_close");
+	t.mock.timers.enable({ apis: ["setTimeout"] });
+	conn.sendClose(4000);
+	const [echoed] = await echoP;
+	assert.equal(echoed, 4000, "the close must be echoed back");
+	t.mock.timers.tick(5000);
+	const [code] = await closedP;
+	assert.equal(code, 4000, "ws_close reports the server's code");
+});
+
+test("a seeded resume address on another host is never sent the token", async t => {
+	// Resume data comes from a file or a store. Whoever can write to it would otherwise choose where the RESUME, token included, gets sent
+	for (const resumeAddress of ["ws://localhost:1/", "not a url"]) {
+		const env = await connectorEnv(t);
+		env.connector.seedResumeData({ sessionId: "sess-seeded", seq: 5, resumeAddress });
+		assert.equal(env.connector.resumeAddress, null);
+
+		const connP = waitFor(env.gw, "connection"); // the configured endpoint, not the seeded address
+		env.connector.connect();
+		/** @type {[UnpackArray<import("./mockgateway.js").MockGateway["conns"]>]} */
+		// @ts-expect-error Trust
+		const [conn] = await connP;
+		const resumeP = waitFor(conn, "message");
+		conn.sendJSON({ op: 10, d: { heartbeat_interval: 45000 } });
+		const [resume] = await resumeP;
+		assert.equal(resume.op, 6, "the session is still worth a resume attempt at the endpoint");
+	}
+});
+
+test("a payload sent during Discord's INVALID_SESSION wait goes out after the new session, not before", async t => {
+	// The connection is unauthenticated until the new identify is accepted. Anything else sent in that window is a 4003 close and a lost payload
+	const env = await connectorEnv(t);
+	const { conn } = await connectAndReady(env);
+	t.mock.method(Math, "random", () => 0); // the shortest allowed wait: 1s
+
+	/** @type {Array<number>} */
+	const ops = [];
+	conn.on("message", message => {
+		if (message.op !== 1) ops.push(message.op);
+	});
+	conn.sendJSON({ op: 9, d: false });
+	await sleep(50);
+	const sentP = env.connector.voiceStateUpdate({ guild_id: "1", channel_id: null, self_mute: false, self_deaf: false });
+	await sleep(1200);
+	assert.deepEqual(ops, [2], "only the identify may go out before READY");
+
+	conn.sendJSON({ op: 0, t: "READY", s: 1, d: { session_id: "sess-new", resume_gateway_url: `ws://127.0.0.1:${env.gw.port}`, user: {}, guilds: [] } });
+	await sentP;
+	await sleep(50);
+	assert.deepEqual(ops, [2, 4], "the held payload is sent once the new session is ready");
+});
+
+test("a payload dropped because the socket is already dead rejects instead of reporting success", async t => {
+	const env = await connectorEnv(t, { bypassBuckets: true });
+	await connectAndReady(env);
+	env.connector.betterWs["_socket"]?.destroy(); // the close event that tears the connection down has not fired yet
+	await assert.rejects(env.connector.voiceStateUpdate({ guild_id: "1", channel_id: null, self_mute: false, self_deaf: false }), /no longer writable/);
+});
+
+test("rawSend never carries the token", async t => {
+	// rawSend is the first thing people pipe into their logs
+	const env = await connectorEnv(t);
+	/** @type {Array<any>} */
+	const sent = [];
+	env.client.on("rawSend", payload => sent.push(payload));
+	const { identify } = await connectAndReady(env);
+	assert.equal(identify.d.token, "TESTTOKEN", "the wire still gets the real token");
+	assert.equal(sent[0].op, 2);
+	assert.ok(!JSON.stringify(sent).includes("TESTTOKEN"), "the identify handed to listeners must have its token redacted");
+});
+
+test("an inherited property name is rejected as an intent instead of resolving to garbage", () => {
+	// "constructor" used to resolve to a function, and "__proto__" to an object that ORs to nothing
+	// @ts-expect-error the whole point is passing a wrong name
+	assert.throws(() => Intents.resolve("constructor"), /BITFIELD_INVALID/);
+	// @ts-expect-error the whole point is passing a wrong name
+	assert.throws(() => Intents.resolve(["GUILDS", "__proto__"]), /BITFIELD_INVALID/);
 });

@@ -1,7 +1,9 @@
 import { EventEmitter } from "node:events";
+
 import DiscordConnector = require("./DiscordConnector");
 
 import type { ShardEvents } from "./Types";
+import { clientError, safeEmit } from "./safeEmit";
 
 /**
  * Shard class, which provides a wrapper around the DiscordConnector with metadata like the id of the shard.
@@ -15,6 +17,8 @@ class Shard extends EventEmitter<ShardEvents> {
 	/** The connector that handles all of the Discord specific connection logic. */
 	public connector: DiscordConnector;
 
+	private readonly _clientError = (error: Error): void => clientError(this.client, error, `Shard ${this.id} `);
+
 	/**
 	 * Create a new Shard.
 	 * @param id id of the shard.
@@ -26,10 +30,10 @@ class Shard extends EventEmitter<ShardEvents> {
 		this.connector = new DiscordConnector(id, client);
 		this.connector.on("disconnect", (...args) => {
 			this.ready = false;
-			this.emit("disconnect", ...args);
+			safeEmit(this._clientError, () => this.emit("disconnect", ...args));
 		});
-		this.connector.on("ready", resume => this.emit("ready", resume));
-		this.connector.on("queueIdentify", () => this.emit("queueIdentify", this.id));
+		this.connector.on("ready", resume => safeEmit(this._clientError, () => this.emit("ready", resume)));
+		this.connector.on("queueIdentify", () => safeEmit(this._clientError, () => this.emit("queueIdentify", this.id)));
 	}
 
 	/**

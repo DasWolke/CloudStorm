@@ -8,7 +8,7 @@ It makes no assumptions about the rest of your stack, therefore you can use it a
 
 ## Some of the things that make CloudStorm awesome:
 - Standalone discord gateway connection
-- zlib-stream, etf and json support
+- zlib-stream, etf and json support (using etf needs `npm i wetf`)
 - Well documented
 
 ## Example:

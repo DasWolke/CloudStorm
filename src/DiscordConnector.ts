@@ -1,9 +1,11 @@
 import { EventEmitter } from "node:events";
+import { isIP } from "node:net";
 import BetterWs = require("./BetterWs");
 import { GATEWAY_OP_CODES as OP, getGatewayAddress } from "./Constants";
 import Intents = require("./Intents");
+import { clientError, safeEmit } from "./safeEmit";
 
-import { Bucket, IntervalCounter, StateMachine, StateMachineGraph as stateMachineGraph, type SMTransition } from "snowtransfer";
+import { Bucket, IntervalCounter, StateMachine, type Counter, type SMTransition } from "snowtransfer";
 
 import {
 	type GatewayReceivePayload,
@@ -43,6 +45,67 @@ const disconnectMessages = {
 	4002: "You sent an invalid payload.",
 	4001: "You sent an invalid opcode or invalid payload for an opcode."
 };
+const tlsProtocols = /^(wss|https):$/;
+
+/**
+ * If a seeded resume address may be sent the token: only the gateway endpoint's own host or a sibling under its domain,
+ * and never over plain text when the endpoint is encrypted.
+ * @since 0.20.0
+ */
+function trustsResumeAddress(address: string, endpoint: string): boolean {
+	try {
+		const resume = new URL(address);
+		const identify = new URL(endpoint);
+		if (tlsProtocols.test(identify.protocol) && !tlsProtocols.test(resume.protocol)) return false;
+		if (resume.hostname === identify.hostname) return true;
+		const labels = identify.hostname.split(".");
+		return !isIP(identify.hostname) && labels.length > 2 && resume.hostname.endsWith(`.${labels.slice(1).join(".")}`);
+	} catch {
+		return false;
+	}
+}
+
+/**
+ * Counts every take within the trailing window. IntervalCounter refills all at once when its window ends,
+ * so a burst at the end of one window plus another at the start of the next could double Discord's limit.
+ * @since 0.20.0
+ */
+class SlidingCounter implements Counter {
+	private readonly _takes: Array<number> = [];
+
+	public constructor(public limit: number, public window: number, public readonly id: string) {}
+
+	private _prune(): void {
+		const cutoff = Date.now() - this.window;
+		while (this._takes.length && this._takes[0] <= cutoff) {
+			this._takes.shift();
+		}
+	}
+
+	public hasReset(): boolean {
+		this._prune();
+		return !this._takes.length;
+	}
+
+	public canTake(): boolean {
+		this._prune();
+		return this._takes.length < this.limit;
+	}
+
+	public take(): boolean {
+		if (!this.canTake()) return false;
+		this._takes.push(Date.now());
+		return true;
+	}
+
+	public timeUntilReset(): number {
+		return this.canTake() ? 0 : this._takes[0] + this.window - Date.now();
+	}
+
+	public responseReceived(): void { void 0; }
+
+	public applyCount(): void { void 0; }
+}
 
 /**
  * Class used for acting based on received events.
@@ -59,8 +122,6 @@ class DiscordConnector extends EventEmitter<ConnectorEvents> {
 	public heartbeatTimeout: globalThis.NodeJS.Timeout | null = null;
 	/** How often this connector should heartbeat if not 0 */
 	public heartbeatInterval = 0;
-	/** The _trace as sent by the Discord READY and RESUMED payloads */
-	public _trace: string | null = null;
 	/** The sequence, which is the number of events received by Discord within the session if any session */
 	public seq = 0;
 	/** The status of this connector */
@@ -81,19 +142,23 @@ class DiscordConnector extends EventEmitter<ConnectorEvents> {
 	 * closing (user-requested disconnect in flight), reconnecting (deliberate close that will reconnect).
 	 */
 	public sm = new StateMachine("disconnected");
-	/** The ratelimit bucket for how many packets this ws can send within a time frame. */
-	public wsBucket = new Bucket([new IntervalCounter(120, 60000)]);
+	/** The ratelimit bucket for how many packets this ws can send within a time frame. Discord allows 120/60s; 5 are left for the identify, resume and heartbeats that skip it. */
+	public wsBucket = new Bucket([new SlidingCounter(115, 60000, "ws")]);
 	/** The ratelimit bucket for how many presence update specific packets this ws can send within a time frame. Is still affected by the overall packet send bucket. */
-	public presenceBucket = new Bucket([new IntervalCounter(5, 60000)]);
+	public presenceBucket = new Bucket([new SlidingCounter(5, 60000, "presence")]);
 	/** The ratelimit bucket for when requesting all guild members from a guild. Is still affected by the overall packet send bucket. */
 	public membersBucket = new Bucket([new IntervalCounter(1, 30000)]);
 
 	/** A Timeout that, when triggered, closes the connection because op HELLO hasn't been received and may never be received */
 	private _openToHeartbeatTimeout: globalThis.NodeJS.Timeout | null = null;
-	/** If an OP 2 IDENTIFY was already sent on the current ws connection and is still authoritative for it */
-	private _identifySent = false;
+	/** If an OP 2 IDENTIFY or OP 6 RESUME was already sent on the current ws connection and is still authoritative for it */
+	private _authSent = false;
+	/** If the close in flight was requested as not resumable, which ends the session no matter what code the close arrives with */
+	private _dropSession = false;
 	/** A Timeout that, when triggered, sends the first heartbeat */
 	private _initialHeartbeatTimeout: globalThis.NodeJS.Timeout | null = null;
+	/** A Timeout that, when triggered, resumes or queues an identify after an OP 9 INVALID_SESSION */
+	private _invalidSessionTimeout: globalThis.NodeJS.Timeout | null = null;
 
 	/**
 	 * The address the WebSocket will use to connect to the Discord gateway if not resuming.
@@ -101,11 +166,6 @@ class DiscordConnector extends EventEmitter<ConnectorEvents> {
 	 */
 	public get identifyAddress(): string {
 		return this.options.endpoint!;
-	}
-
-	/** If this connector is deliberately closing its connection right now in order to open a new one */
-	public get reconnecting(): boolean {
-		return this.sm.currentStateName === "reconnecting";
 	}
 
 	/**
@@ -165,55 +225,33 @@ class DiscordConnector extends EventEmitter<ConnectorEvents> {
 		this.sm.defineUniversalTransition("ws_closed", "disconnected");
 		this.sm.freeze();
 
-		if (process.argv.includes("--state-machine-graph-connector")) {
-			console.log(stateMachineGraph.graph(this.sm));
-		}
-
 		this.betterWs = new BetterWs(this.identifyAddress, this.options.ws!);
 
 		this.betterWs.on("ws_open", () => {
-			this._setStatus("connecting");
+			this.status = "connecting";
 			this._openToHeartbeatTimeout = setTimeout(() => {
-				this.client.emit("debug", `Shard ${this.id} didn't receive a HELLO after the ws was opened in time`);
-				this._reconnect();
+				safeEmit(this._clientError, () => this.client.emit("debug", `Shard ${this.id} didn't receive a HELLO after the ws was opened in time`));
+				this._reconnect().catch(this._clientError);
 			}, 10000);
 		});
-		// A throw out of this listener (e.g. from a user's "dispatch" listener) would land in the socket's
-		// read loop, which treats it as malformed wire data and tears the connection down
-		this.betterWs.on("ws_receive", msg => {
-			try {
-				this.messageAction(msg);
-			} catch (e) {
-				this._clientError(e instanceof Error ? e : new Error(String(e)));
-			}
-		});
+		this.betterWs.on("ws_receive", msg => this.messageAction(msg));
 		this.betterWs.on<"ws_close">("ws_close", (code, reason) => this.handleWsClose(code, reason));
-		this.betterWs.on("debug", event => this.client.emit("debug", `Shard ${this.id} ${event}`));
+		this.betterWs.on("debug", event => safeEmit(this._clientError, () => this.client.emit("debug", `Shard ${this.id} ${event}`)));
 		this.betterWs.on("error", event => this._clientError(event));
-		this.betterWs.on("ws_send", data => this.client.emit("rawSend", data));
+		this.betterWs.on("ws_send", data => {
+			// identify and resume carry the token, and rawSend tends to end up in logs
+			const redacted = data?.d?.token ? { ...data, d: { ...data.d, token: "[redacted]" } } : data;
+			safeEmit(this._clientError, () => this.client.emit("rawSend", redacted));
+		});
 
 		this._pauseBuckets();
 	}
 
 	/**
-	 * Emit an error on the client if anyone listens for them, otherwise degrade to a debug event.
-	 * "error" with zero listeners throws by EventEmitter contract, and the connector emits from socket,
-	 * timer and bucket contexts where that throw would crash the process instead of reaching user code.
+	 * Emit an error on the client if anyone listens for them, otherwise downgrade to a debug event.
 	 * @since 0.19.0
 	 */
-	private _clientError(error: Error): void {
-		if (this.client.listenerCount("error")) this.client.emit("error", error);
-		else this.client.emit("debug", `Shard ${this.id} unlistened error: ${error.message}`);
-	}
-
-	/**
-	 * Set the status of this connector and notify listeners about the change.
-	 * @since 0.19.0
-	 */
-	private _setStatus(status: DiscordConnector["status"]): void {
-		this.status = status;
-		this.emit("stateChange", status);
-	}
+	private readonly _clientError = (error: Error): void => clientError(this.client, error, `Shard ${this.id} `);
 
 	/**
 	 * Pause all send ratelimit buckets, queueing further messages until resumed.
@@ -239,10 +277,10 @@ class DiscordConnector extends EventEmitter<ConnectorEvents> {
 	 * Connect to Discord.
 	 * @since 0.1.4
 	 */
-	public async connect(): Promise<void> {
+	public connect(): void {
 		const state = this.sm.currentStateName;
 		if (state !== "disconnected" && state !== "closing") return;
-		this.client.emit("debug", `Shard ${this.id} connecting to gateway`);
+		safeEmit(this._clientError, () => this.client.emit("debug", `Shard ${this.id} connecting to gateway`));
 		this.sm.doTransition("connect_started");
 		this.betterWs.address = this.sessionId && this.resumeAddress ? this.resumeAddress : this.identifyAddress;
 		return this.betterWs.connect();
@@ -268,13 +306,15 @@ class DiscordConnector extends EventEmitter<ConnectorEvents> {
 	 * Seed this connector with resume data from a previous process, making the next connect
 	 * resume the session instead of identifying. If Discord no longer accepts the session,
 	 * the connector falls back to identifying automatically via INVALID_SESSION.
+	 * A resume address that isn't on the gateway endpoint's host or domain is ignored and the resume goes to the endpoint.
 	 * @since 0.19.0
 	 * @param data Resume data as returned by getResumeData().
 	 */
 	public seedResumeData(data: IShardResumeData): void {
 		this.sessionId = data.sessionId ?? null;
 		this.seq = data.seq ?? 0;
-		this.resumeAddress = data.resumeAddress ?? null;
+		this.resumeAddress = data.resumeAddress && trustsResumeAddress(data.resumeAddress, this.identifyAddress) ? data.resumeAddress : null;
+		if (data.resumeAddress && !this.resumeAddress) this._clientError(new Error(`Shard ${this.id} ignored the seeded resume address ${data.resumeAddress} because it is not on the gateway endpoint's host`));
 	}
 
 	/**
@@ -288,6 +328,7 @@ class DiscordConnector extends EventEmitter<ConnectorEvents> {
 		this._pauseBuckets();
 		this.clearHeartBeat();
 		if (this.betterWs.sm.currentStateName === "disconnected") return;
+		this._dropSession = !resumable;
 		this.sm.doTransition("close_requested");
 		// also cancels a connect still waiting/in flight
 		return this.betterWs.close(resumable ? 4000 : 1000, resumable ? "Disconnecting with intent to resume" : "Disconnected by User");
@@ -299,9 +340,9 @@ class DiscordConnector extends EventEmitter<ConnectorEvents> {
 	 * @param message Message that was received.
 	 */
 	private messageAction(message: GatewayReceivePayload): void {
-		this.client.emit("rawReceive", message);
+		safeEmit(this._clientError, () => this.client.emit("rawReceive", message));
 		const withShardID: IGatewayMessage = Object.assign(message, { shard_id: this.id });
-		this.client.emit("event", withShardID);
+		safeEmit(this._clientError, () => this.client.emit("event", withShardID));
 
 		switch (withShardID.op) {
 		case OP.DISPATCH:
@@ -313,30 +354,37 @@ class DiscordConnector extends EventEmitter<ConnectorEvents> {
 			break;
 
 		case OP.RECONNECT:
-			this.client.emit("debug", `Gateway asked shard ${this.id} to reconnect`);
-			this._reconnect();
+			safeEmit(this._clientError, () => this.client.emit("debug", `Gateway asked shard ${this.id} to reconnect`));
+			this._reconnect().catch(this._clientError);
 			break;
 
 		case OP.INVALID_SESSION:
-			this.client.emit("debug", `Shard ${this.id}'s session was invalidated`);
-			if (withShardID.d && this.sessionId) this.resume();
-			else {
+			safeEmit(this._clientError, () => this.client.emit("debug", `Shard ${this.id}'s session was invalidated`));
+			if (!withShardID.d || !this.sessionId) {
 				this.seq = 0;
 				this.sessionId = null;
-				this._identifySent = false; // Discord explicitly wants a fresh identify on this same connection
-				this.emit("queueIdentify", this.id);
+				this._authSent = false; // Discord explicitly wants a fresh identify on this same connection
 			}
+			// Anything but an identify or resume sent before Discord accepts one gets the connection closed with a 4003
+			this._pauseBuckets();
+			this.status = "connecting";
+			// Discord asks for a random 1-5s wait before resuming or identifying again
+			if (this._invalidSessionTimeout) clearTimeout(this._invalidSessionTimeout);
+			this._invalidSessionTimeout = setTimeout(() => {
+				this._invalidSessionTimeout = null;
+				if (this.sessionId) this.resume().catch(this._clientError);
+				else safeEmit(this._clientError, () => this.emit("queueIdentify", this.id));
+			}, 1000 + Math.random() * 4000);
 			break;
 
 		case OP.HELLO:
 			if (this._openToHeartbeatTimeout) clearTimeout(this._openToHeartbeatTimeout);
-			this.client.emit("debug", `Shard ${this.id} received HELLO`);
+			safeEmit(this._clientError, () => this.client.emit("debug", `Shard ${this.id} received HELLO`));
 			this.lastACKAt = Date.now();
 			this.heartbeatInterval = withShardID.d.heartbeat_interval;
 			this._initialHeartbeatTimeout = setTimeout(() => this.heartbeat(), this.heartbeatInterval * Math.random());
-			this._trace = (withShardID.d as unknown as { _trace: string })._trace;
-			if (this.sessionId) return void this.resume();
-			else this.emit("queueIdentify", this.id);
+			if (this.sessionId) return void this.resume().catch(this._clientError);
+			else safeEmit(this._clientError, () => this.emit("queueIdentify", this.id));
 			break;
 
 		case OP.HEARTBEAT_ACK:
@@ -360,8 +408,8 @@ class DiscordConnector extends EventEmitter<ConnectorEvents> {
 		if (state !== "connected" && state !== "half_close") return;
 		this.sm.doTransition("reconnect_requested");
 		this._pauseBuckets();
-		await this.betterWs.close(4000, "reconnecting");
 		this.clearHeartBeat();
+		await this.betterWs.close(4000, "reconnecting");
 	}
 
 	/**
@@ -371,8 +419,8 @@ class DiscordConnector extends EventEmitter<ConnectorEvents> {
 	private setHeartBeat(): void {
 		this.heartbeatTimeout = setInterval(() => {
 			if (this.lastACKAt <= Date.now() - (this.heartbeatInterval + 5000)) {
-				this.client.emit("debug", `Shard ${this.id} has not received a heartbeat ACK in ${this.heartbeatInterval + 5000}ms.`);
-				this._reconnect();
+				safeEmit(this._clientError, () => this.client.emit("debug", `Shard ${this.id} has not received a heartbeat ACK in ${this.heartbeatInterval + 5000}ms.`));
+				this._reconnect().catch(this._clientError);
 			} else this.heartbeat();
 		}, this.heartbeatInterval);
 	}
@@ -385,9 +433,11 @@ class DiscordConnector extends EventEmitter<ConnectorEvents> {
 		if (this.heartbeatTimeout) clearInterval(this.heartbeatTimeout);
 		if (this._initialHeartbeatTimeout) clearTimeout(this._initialHeartbeatTimeout);
 		if (this._openToHeartbeatTimeout) clearTimeout(this._openToHeartbeatTimeout);
+		if (this._invalidSessionTimeout) clearTimeout(this._invalidSessionTimeout);
 		this.heartbeatTimeout = null;
 		this._initialHeartbeatTimeout = null;
 		this._openToHeartbeatTimeout = null;
+		this._invalidSessionTimeout = null;
 		this.heartbeatInterval = 0;
 	}
 
@@ -400,17 +450,17 @@ class DiscordConnector extends EventEmitter<ConnectorEvents> {
 			this._clientError(new Error(`Shard ${this.id} was attempting to identify when the ws was not open. Current state: ${this.betterWs.sm.currentStateName}`));
 			return this._reconnect();
 		}
-		if (this._identifySent) {
-			// A stale queued identify from before a reconnect. The identify already sent on this connection
-			// is the authoritative one; sending a second would get the session closed with a 4005
-			this.client.emit("debug", `Shard ${this.id} skipped a duplicate identify on the same connection`);
+		if (this._authSent) {
+			// A stale queued identify from before a reconnect. The identify or resume already sent on this connection
+			// is the authoritative one; identifying on top of it would get the session closed with a 4005
+			safeEmit(this._clientError, () => this.client.emit("debug", `Shard ${this.id} skipped a duplicate identify on the same connection`));
 			return;
 		}
-		this._identifySent = true;
-		this.client.emit("debug", `Shard ${this.id} is identifying`);
+		this._authSent = true;
+		safeEmit(this._clientError, () => this.client.emit("debug", `Shard ${this.id} is identifying`));
 
 		this.sm.doTransition("identify_started");
-		this._setStatus("identifying");
+		this.status = "identifying";
 
 		const data = {
 			op: OP.IDENTIFY,
@@ -428,7 +478,7 @@ class DiscordConnector extends EventEmitter<ConnectorEvents> {
 		} as GatewayIdentify;
 
 		if (this.options.initialPresence) data.d.presence = this._checkPresenceData(this.options.initialPresence);
-		return this.betterWs.sendMessage(data);
+		this.betterWs.sendMessage(data);
 	}
 
 	/**
@@ -440,12 +490,13 @@ class DiscordConnector extends EventEmitter<ConnectorEvents> {
 			this._clientError(new Error(`Shard ${this.id} was attempting to resume when the ws was not open. Current state: ${this.betterWs.sm.currentStateName}`));
 			return this._reconnect();
 		}
-		this.client.emit("debug", `Shard ${this.id} is resuming`);
+		safeEmit(this._clientError, () => this.client.emit("debug", `Shard ${this.id} is resuming`));
 
+		this._authSent = true;
 		this.sm.doTransition("resume_started");
-		this._setStatus("resuming");
+		this.status = "resuming";
 
-		return this.betterWs.sendMessage({
+		this.betterWs.sendMessage({
 			op: OP.RESUME,
 			d: { seq: this.seq, token: this.options.token, session_id: this.sessionId! }
 		});
@@ -460,7 +511,7 @@ class DiscordConnector extends EventEmitter<ConnectorEvents> {
 		if (state === "half_close") return; // a close is already in flight. Don't heartbeat into it or treat it as a dead connection
 		if (state !== "connected") {
 			this._clientError(new Error(`Shard ${this.id} was attempting to heartbeat when the ws was not open. Current state: ${state}`));
-			return void this._reconnect();
+			return void this._reconnect().catch(this._clientError);
 		}
 		this.betterWs.sendMessage({ op: OP.HEARTBEAT, d: this.seq === 0 ? null : this.seq });
 		this.lastHeartbeatSend = Date.now();
@@ -479,14 +530,14 @@ class DiscordConnector extends EventEmitter<ConnectorEvents> {
 	private handleDispatch(message: IGatewayDispatch): void {
 		if (message.s) { // sequence is from dispatch
 			if (message.s > this.seq + 1) {
-				this.client.emit("debug", `Shard ${this.id} invalid sequence: { current: ${this.seq} message: ${message.s} }`);
-				this._reconnect();
+				safeEmit(this._clientError, () => this.client.emit("debug", `Shard ${this.id} invalid sequence: { current: ${this.seq} message: ${message.s} }`));
+				this._reconnect().catch(this._clientError);
 				return;
 			}
 			this.seq = message.s;
 		}
 
-		this.client.emit("dispatch", message);
+		safeEmit(this._clientError, () => this.client.emit("dispatch", message));
 
 		switch (message.t) {
 		case "READY":
@@ -499,13 +550,12 @@ class DiscordConnector extends EventEmitter<ConnectorEvents> {
 			if (state === "closing" || state === "reconnecting") {
 				// The READY/RESUMED crossed a deliberate close still in flight. The connection is on its way down;
 				// announcing ready would flip the status and buckets back on mid-teardown
-				this.client.emit("debug", `Shard ${this.id} received ${message.t} while ${state} and won't announce ready`);
+				safeEmit(this._clientError, () => this.client.emit("debug", `Shard ${this.id} received ${message.t} while ${state} and won't announce ready`));
 				break;
 			}
 			this.sm.doTransition("ready_received");
-			this._setStatus("ready");
-			this._trace = (message.d as unknown as { _trace: string })._trace;
-			this.emit("ready", message.t === "RESUMED");
+			this.status = "ready";
+			safeEmit(this._clientError, () => this.emit("ready", message.t === "RESUMED"));
 			this._resumeBuckets();
 			break;
 		}
@@ -527,10 +577,10 @@ class DiscordConnector extends EventEmitter<ConnectorEvents> {
 		const stateBeforeClose = this.sm.currentStateName;
 		this.sm.doTransition("ws_closed");
 
-		this._setStatus("disconnected");
+		this.status = "disconnected";
 		this.clearHeartBeat();
 		this._pauseBuckets();
-		this._identifySent = false; // whatever identify happened belonged to the connection that just died
+		this._authSent = false; // whatever identify or resume happened belonged to the connection that just died
 
 		const isManualClose = stateBeforeClose === "closing";
 		const gracefulClose = isManualClose || stateBeforeClose === "reconnecting";
@@ -542,10 +592,12 @@ class DiscordConnector extends EventEmitter<ConnectorEvents> {
 		// The session only survives closures Discord considers resumable. Keeping it would make the next connection
 		// attempt a doomed resume (e.g. after 4007/4009), wasting a round trip on INVALID_SESSION before identifying.
 		// connect() picks the resume or identify address based on whether a session remains.
-		if (!isRecoverable) {
+		// A disconnect that wasn't asked to be resumable ends it too, even when the server never answered and the close reads as a 1006.
+		if (!isRecoverable || this._dropSession) {
 			this.sessionId = null;
 			this.seq = 0;
 		}
+		this._dropSession = false;
 
 		if (message) {
 			const error = new Error(message);
@@ -557,7 +609,7 @@ class DiscordConnector extends EventEmitter<ConnectorEvents> {
 			else this._clientError(error);
 		}
 
-		this.emit("disconnect", code, reason, gracefulClose, isManualClose);
+		safeEmit(this._clientError, () => this.emit("disconnect", code, reason, gracefulClose, isManualClose));
 
 		if (!shouldntReconnect) this.connect();
 	}
@@ -616,26 +668,26 @@ class DiscordConnector extends EventEmitter<ConnectorEvents> {
 	public async sendMessage(data: GatewaySendPayload): Promise<void> {
 		const bypass = this.options.ws!.bypassBuckets;
 		return new Promise<void>((res, rej) => {
-			const sendMsg = async () => {
-				const fn = async () => {
+			const sendMsg = () => {
+				const fn = () => {
 					try {
-						this.betterWs.sendMessage(data);
-						res(void 0);
+						if (this.betterWs.sendMessage(data)) res(void 0);
+						else rej(new Error(`Shard ${this.id} dropped a message because the ws was no longer writable`));
 					} catch (e) {
 						rej(e instanceof Error ? e : new Error(String(e)));
 					}
 				};
 				if (bypass) fn();
-				else this.wsBucket.enqueue(fn);
+				else this.wsBucket.enqueue(async () => fn()).catch(this._clientError);
 			};
 			if (bypass) sendMsg();
 			else {
 				switch (data.op) {
 				case OP.PRESENCE_UPDATE:
-					this.presenceBucket.enqueue(sendMsg);
+					this.presenceBucket.enqueue(async () => sendMsg()).catch(this._clientError);
 					break;
 				case OP.REQUEST_GUILD_MEMBERS:
-					if ("query" in data.d && data.d.query.length === 0 && data.d.limit === 0) this.membersBucket.enqueue(sendMsg);
+					if ("query" in data.d && data.d.query.length === 0 && data.d.limit === 0) this.membersBucket.enqueue(async () => sendMsg()).catch(this._clientError);
 					else sendMsg();
 					break;
 				default:

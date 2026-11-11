@@ -10,15 +10,16 @@ import http = require("node:http");
 
 import type { Socket } from "node:net";
 
+import { StateMachine, type SMTransition } from "snowtransfer";
+import Constants = require("./Constants");
+import eventSwitch = require("./eventSwitch");
+import { getEtf } from "./etf";
+import { rethrowLater, safeEmit } from "./safeEmit";
+
 import type {
 	BWSEvents,
 	IClientWSOptions
 } from "./Types";
-
-import { StateMachine, StateMachineGraph as stateMachineGraph, type SMTransition } from "snowtransfer";
-import Constants = require("./Constants");
-import eventSwitch = require("./eventSwitch");
-import etf = require("./etf");
 
 /** Fixed GUID the WebSocket spec (RFC 6455) requires for the Sec-WebSocket-Accept handshake. */
 const WS_KEY_GUID = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11";
@@ -34,6 +35,8 @@ class BetterWs extends EventEmitter<BWSEvents> {
 	public compress: boolean;
 	/** How much to delay repeated calls to `connect()`. */
 	public connectThrottle: number;
+	/** The most bytes a frame, a reassembled message or an inflated message may be before the connection is dropped. */
+	public maxPayload: number;
 	/** Tracks the state this WebSocket is in and what operations are allowed. */
 	public sm = new StateMachine("disconnected");
 
@@ -45,25 +48,30 @@ class BetterWs extends EventEmitter<BWSEvents> {
 	private _lastCloseReason: string | null = null;
 	/** A promise that resolves when the connection is fully closed or null if not closing the connection if any. */
 	private _closePromise: Promise<void> | null = null;
+	/** The resolve function from the _closePromise to call to settle the Promise */
 	private _closeResolver: ((value: void | PromiseLike<void>) => void) | null = null;
 	/** A zlib Inflate instance if messages sent/received are going to be compressed. Auto created on connect. */
 	private _zlib: Inflate | null = null;
-	/** Stores when the last connection attempt was made, in order to limit reconnection loops. */
+	/** Stores when the last connection attempt was made in order to limit reconnection loops. */
 	private lastConnectAttempt = 0;
 	/** The in-flight upgrade request if currently connecting. Kept so a cancelled connect can abort it. */
 	private _req: http.ClientRequest | null = null;
+	/** The parts of a fragmented message received so far if one is in flight. */
+	private _fragments: { opcode: number; parts: Array<Buffer>; length: number; } | null = null;
 
 	/**
 	 * Creates a new lightweight WebSocket.
 	 * @param address The http(s):// or ws(s):// URL corresponding to the server to connect to.
 	 * @param options Options specific to this WebSocket.
 	 */
-	public constructor(public address: string, public options: Omit<IClientWSOptions, "encoding"> & { encoding?: IClientWSOptions["encoding"] | "other" }) {
+	public constructor(public address: string, public options: Omit<IClientWSOptions, "encoding"> & { encoding?: Exclude<IClientWSOptions["encoding"], undefined> | "other" }) {
 		super();
 
 		this.encoding = options.encoding ?? "other";
+		if (this.encoding === "etf") getEtf();
 		this.compress = options.compress ?? false;
 		this.connectThrottle = options.connectThrottle ?? 10e3;
+		this.maxPayload = options.maxPayload ?? 100 * 1024 * 1024;
 
 		// user_close from a state without an established connection: no close handshake possible, just record why and land in disconnected
 		const cancelConnect: SMTransition = {
@@ -100,14 +108,20 @@ class BetterWs extends EventEmitter<BWSEvents> {
 		this.sm.defineState("connecting", {
 			onEnter: [
 				() => {
-					const { req, key } = createReq(this.address, this.options.headers);
+					let created: ReturnType<typeof createReq>;
+					try {
+						created = createReq(this.address, this.options.headers);
+					} catch (e) {
+						return this.sm.doTransition("error", e instanceof Error ? e : new Error(String(e)));
+					}
+					const { req, key } = created;
 					this._req = req;
 					// node docs lie about destroyed requests not emitting errors after the fact, so this handler is necessary, but will be removed when req is GC swept
-					req.on("error", e => this.emit("debug", `Late request error: ${e.message}`));
-					this.emit("debug", "Socket sending request to upgrade");
+					req.on("error", e => safeEmit(this._emitError, () => this.emit("debug", `Late request error: ${e.message}`)));
+					safeEmit(this._emitError, () => this.emit("debug", "Socket sending request to upgrade"));
 					eventSwitch(req, {
 						upgrade: (res: http.IncomingMessage, socket: Socket, head: Buffer) => {
-							if (this.sm.currentStateName !== "connecting") return void socket.destroy(); // connect was cancelled while the upgrade was in flight. Don't adopt (and leak) the socket
+							if (this.sm.currentStateName !== "connecting") return void socket.destroy(); // connect was cancelled while the upgrade was in flight
 							const hash = createHash("sha1").update(key + WS_KEY_GUID).digest("base64");
 							const accept = res.headers["sec-websocket-accept"];
 							if (hash !== accept) {
@@ -115,7 +129,12 @@ class BetterWs extends EventEmitter<BWSEvents> {
 								socket.end();
 								return this.sm.doTransition("error", new Error(`Failed websocket-key validation: expected: ${hash} | received: ${accept}`));
 							}
-							this.sm.doTransition("upgrade", res, socket, head);
+							try {
+								this.sm.doTransition("upgrade", res, socket, head);
+							} catch (e) {
+								// the state is already connected while the upgrade callbacks run, so the catch below would ignore this
+								this.sm.doTransition("error", e instanceof Error ? e : new Error(String(e)));
+							}
 						},
 						error: e => {
 							throw e;
@@ -139,20 +158,20 @@ class BetterWs extends EventEmitter<BWSEvents> {
 							this._req = null;
 							this._socket = socket;
 							if (this.compress) {
-								const z = createInflate();
+								const z = createInflate({ maxOutputLength: this.maxPayload });
 								// @ts-ignore
 								z._c = z.close; z._h = z._handle; z._hc = z._handle.close; z._v = () => void 0;
 								this._zlib = z;
 							}
-							this.emit("upgrade", res.headers);
+							safeEmit(this._emitError, () => this.emit("upgrade", res.headers));
 
 							this._socket.once("close", () => this.sm.doTransition("disconnect"));
 							this._socket.on("error", e => this.sm.doTransition("error", e));
 							this._socket.on("readable", this._onReadable.bind(this));
 							// Frames the server sent in the same segment as the 101 response arrive in head, not on the socket.
-							// Discord sends HELLO immediately, so dropping head can eat the first frame(s) and hang the connection.
+							// dropping head can eat the first frame(s) and hang the connection.
 							if (head?.length) socket.unshift(head);
-							this.emit("ws_open");
+							safeEmit(this._emitError, () => this.emit("ws_open"));
 						}
 					]
 				}],
@@ -169,12 +188,18 @@ class BetterWs extends EventEmitter<BWSEvents> {
 					destination: "half_close",
 					onTransition: [
 						(code: number, reason?: string) => {
-							this.emit("debug", "User requested socket close");
+							safeEmit(this._emitError, () => this.emit("debug", "User requested socket close"));
 
 							// Ask Discord to disconnect us
 							const from = Buffer.from([code >> 8, code & 255]);
 							this._write(reason ? Buffer.concat([from, Buffer.from(reason)]) : from, 8);
 						}
+					]
+				}],
+				["server_close", {
+					destination: "half_close",
+					onTransition: [
+						(code: number | null) => void this._write(code === null ? Buffer.allocUnsafe(0) : Buffer.from([code >> 8, code & 255]), 8)
 					]
 				}]
 			])
@@ -195,7 +220,7 @@ class BetterWs extends EventEmitter<BWSEvents> {
 					destination: "disconnected",
 					onTransition: [
 						() => {
-							this.emit("debug", "Server didn't respond for a full close in time");
+							safeEmit(this._emitError, () => this.emit("debug", "Server didn't respond for a full close in time"));
 						}
 					]
 				}],
@@ -217,13 +242,14 @@ class BetterWs extends EventEmitter<BWSEvents> {
 					}
 					this._req?.destroy();
 					this._req = null;
+					this._fragments = null;
 					if (this._socket) {
 						this._socket.destroy();
 						this._socket.removeAllListeners();
-						this._socket.on("error", () => void 0); // destroyed sockets can also emit late errors. With all listeners removed that would be an uncaughtException
+						this._socket.on("error", () => void 0); // destroyed sockets can also emit late errors
 						this._socket = null;
 					}
-					this.emit("ws_close", this._lastCloseCode ?? 1006, this._lastCloseReason ?? "Abnormal Closure");
+					safeEmit(this._emitError, () => this.emit("ws_close", this._lastCloseCode ?? 1006, this._lastCloseReason ?? "Abnormal Closure"));
 					this._lastCloseCode = null;
 					this._lastCloseReason = null;
 				}
@@ -239,10 +265,6 @@ class BetterWs extends EventEmitter<BWSEvents> {
 		});
 
 		this.sm.freeze();
-
-		if (process.argv.includes("--state-machine-graph-betterws")) {
-			console.log(stateMachineGraph.graph(this.sm));
-		}
 	}
 
 	/**
@@ -258,12 +280,15 @@ class BetterWs extends EventEmitter<BWSEvents> {
 	 * Encodes and writes a message to the server immediately.
 	 * @since 0.1.4
 	 * @param data What to send to the server.
+	 * @returns If the message was written. false means the socket was no longer writable and the message was dropped.
 	 */
-	public sendMessage(data: any): void {
-		if (this.encoding === "json") this._write(Buffer.from(JSON.stringify(data)), 1);
-		else if (this.encoding === "etf") this._write(etf.write(data), 2);
-		else if (this.encoding === "other") this._write(Buffer.from(data), 2);
-		this.emit("ws_send", data);
+	public sendMessage(data: any): boolean {
+		let sent = false;
+		if (this.encoding === "json") sent = this._write(Buffer.from(JSON.stringify(data)), 1);
+		else if (this.encoding === "etf") sent = this._write(getEtf().packer.pack(data) as Uint8Array, 2);
+		else if (this.encoding === "other") sent = this._write(Buffer.from(data), 2);
+		if (sent) safeEmit(this._emitError, () => this.emit("ws_send", data));
+		return sent;
 	}
 
 	/**
@@ -276,44 +301,42 @@ class BetterWs extends EventEmitter<BWSEvents> {
 	 * @returns A Promise that resolves when the connection is fully closed.
 	 */
 	public async close(code: number, reason?: string): Promise<void> {
-		const state = this.sm.currentStateName;
-		if (state === "disconnected") return;
+		if (this.sm.currentStateName === "disconnected") return;
 		if (!this._closePromise) {
 			const { promise, resolve } = Promise.withResolvers<void>();
 			this._closePromise = promise;
 			this._closeResolver = resolve;
 		}
 		const closed = this._closePromise;
-		this.sm.doTransition("user_close", code, reason);
+		// re-entering half_close would restart its close_no_response timer, so repeated calls could postpone the fallback forever
+		if (this.sm.currentStateName !== "half_close") this.sm.doTransition("user_close", code, reason);
 		return closed;
 	}
 
 	/**
-	 * Emit an error if anyone listens for them, otherwise degrade to a debug event.
-	 * "error" with zero listeners throws by EventEmitter contract, which must never happen inside wire-handling code paths.
+	 * Emit an error if anyone listens for them, otherwise downgrade to a debug event.
 	 * @since 0.19.0
 	 */
-	private _emitError(error: Error): void {
-		if (this.listenerCount("error")) this.emit("error", error);
-		else this.emit("debug", `Unlistened error: ${error.message}`);
-	}
+	private readonly _emitError = (error: Error): void => {
+		if (this.listenerCount("error")) safeEmit(rethrowLater, () => this.emit("error", error));
+		else safeEmit(() => void 0, () => this.emit("debug", `Unlistened error: ${error.message}`));
+	};
 
 	/**
 	 * Method to raw write messages to the server.
 	 * @since 0.4.1
 	 * @param packet Buffer containing the message to send.
 	 * @param opcode WebSocket spec op code.
+	 * @returns If the message was written to the socket.
 	 */
-	private _write(packet: Buffer, opcode: number): void {
+	private _write(packet: Uint8Array, opcode: number): boolean {
 		const socket = this._socket;
 		if (!socket?.writable) {
-			// Tried to write to a missing, closed, or not-writeable socket. Either way, this connection isn't recoverable, we need a new one.
-			// Deferred to a microtask because _write can run inside a state transition callback and transitions must not nest.
 			queueMicrotask(() => {
 				const state = this.sm.currentStateName;
 				if (state === "connected" || state === "half_close") this.sm.doTransition("disconnect");
 			});
-			return;
+			return false;
 		}
 		const length = packet.length;
 		let frame: Buffer;
@@ -331,9 +354,14 @@ class BetterWs extends EventEmitter<BWSEvents> {
 			frame.writeBigUInt64BE(BigInt(length), 2);
 		}
 		frame[0] = 128 + opcode;
-		frame.writeUInt32BE(0, frame.length - length - 4);
-		frame.set(packet, frame.length - length);
+		const mask = randomBytes(4);
+		const offset = frame.length - length;
+		frame.set(mask, offset - 4);
+		for (let i = 0; i < length; i++) {
+			frame[offset + i] = packet[i] ^ mask[i & 3];
+		}
 		socket.write(frame);
+		return true;
 	}
 
 	/**
@@ -343,27 +371,37 @@ class BetterWs extends EventEmitter<BWSEvents> {
 	private _onReadable(): void {
 		const socket = this._socket;
 		if (!socket) return;
-		while(socket.readableLength > 1) {
-			let length = readRange(socket, 1, 1) & 127;
-			let bytes = 0;
-			if (length > 125) {
-				bytes = length === 126 ? 2 : 8;
-				if (socket.readableLength < 2 + bytes) return;
-				length = readRange(socket, 2, bytes);
-			}
-			const frame = socket.read(2 + bytes + length) as Buffer;
-			if (!frame) return;
-			const fin = frame[0] >> 7;
-			const opcode = frame[0] & 15;
-			if (fin !== 1 || opcode === 0) this._emitError(new Error("discord actually does send messages with fin=0. if you see this error let me know"));
-			const payload = frame.subarray(2 + bytes);
-			try {
+		try {
+			while(socket.readableLength > 1) {
+				let length = readRange(socket, 1, 1) & 127;
+				let bytes = 0;
+				if (length > 125) {
+					bytes = length === 126 ? 2 : 8;
+					if (socket.readableLength < 2 + bytes) return;
+					length = readRange(socket, 2, bytes);
+				}
+				if (length > this.maxPayload) throw new Error(`Received a frame of ${length} bytes, which is over the maxPayload of ${this.maxPayload}`);
+				const frame = socket.read(2 + bytes + length) as Buffer;
+				if (!frame) return;
+				const fin = frame[0] >> 7;
+				let opcode = frame[0] & 15;
+				let payload = frame.subarray(2 + bytes);
+				if (opcode < 8 && (fin !== 1 || opcode === 0)) {
+					if (opcode !== 0) this._fragments = { opcode, parts: [], length: 0 };
+					const message = this._fragments;
+					if (!message) throw new Error("Received a continuation frame with no message to continue");
+					message.parts.push(payload);
+					message.length += payload.length;
+					if (message.length > this.maxPayload) throw new Error(`Received a fragmented message over the maxPayload of ${this.maxPayload} bytes`);
+					if (fin !== 1) continue;
+					opcode = message.opcode;
+					payload = Buffer.concat(message.parts, message.length);
+					this._fragments = null;
+				}
 				this._processFrame(opcode, payload);
-			} catch (e) {
-				// Malformed wire data (bad zlib chunk, invalid JSON/ETF) would otherwise throw into the socket's readable handler and crash the process.
-				// The stream can't be trusted anymore, so tear the connection down and let the connector reconnect/resume.
-				return this.sm.doTransition("error", e instanceof Error ? e : new Error(String(e)));
 			}
+		} catch (e) {
+			this.sm.doTransition("error", e instanceof Error ? e : new Error(String(e)));
 		}
 	}
 
@@ -379,11 +417,11 @@ class BetterWs extends EventEmitter<BWSEvents> {
 			let packet: any;
 			if (this.encoding === "json") packet = JSON.parse(message.toString());
 			else packet = message;
-			this.emit("ws_receive", packet);
+			safeEmit(this._emitError, () => this.emit("ws_receive", packet));
 			break;
 		}
 		case 2: {
-			let packet;
+			let packet: any;
 			if (this.compress) {
 				let error = null;
 				let data = null;
@@ -410,28 +448,27 @@ class BetterWs extends EventEmitter<BWSEvents> {
 				z._eventCount--;
 				z.removeAllListeners("error");
 				if (error) {
-					this._emitError(new Error("Zlib error processing chunk"));
-					this._write(Buffer.allocUnsafe(0), 8);
-					return;
+					z.on("error", () => void 0); // node re-emits the failure async, which kills the process with nothing listening
+					throw new Error("Zlib error processing chunk", { cause: error });
 				}
 				if (!data) {
 					this._emitError(new Error("Data from zlib processing was null. If you see this error let me know")); // This should never run, but TS is lame
 					return;
 				}
 				if (this.encoding === "json") packet = JSON.parse(String(data));
-				else if (this.encoding === "etf") packet = etf.read(data, 1);
+				else if (this.encoding === "etf") packet = getEtf().unpacker.unpack(data);
 				else if (this.encoding === "other") packet = data;
-			} else if (this.encoding === "json") packet = JSON.parse(inflateSync(message).toString());
-			else if (this.encoding === "etf") packet = etf.read(message, 1);
+			} else if (this.encoding === "json") packet = JSON.parse(inflateSync(message, { maxOutputLength: this.maxPayload }).toString());
+			else if (this.encoding === "etf") packet = getEtf().unpacker.unpack(message);
 			else if (this.encoding === "other") packet = message;
-			this.emit("ws_receive", packet);
+			safeEmit(this._emitError, () => this.emit("ws_receive", packet));
 			break;
 		}
 		case 8: {
 			const code = message.length > 1 ? (message[0] << 8) + message[1] : null; // an empty close frame has no code. Leave null so ws_close falls back to 1006
 			this._lastCloseCode = code;
 			this._lastCloseReason = message.length > 2 ? message.subarray(2).toString() : "";
-			if (this.sm.currentStateName !== "half_close") this._write(code === null ? Buffer.allocUnsafe(0) : Buffer.from([code >> 8, code & 255]), 8);
+			if (this.sm.currentStateName === "connected") this.sm.doTransition("server_close", code);
 			break;
 		}
 		case 9: {

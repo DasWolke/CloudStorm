@@ -14,7 +14,7 @@ function eventSwitch(emitter: EventEmitter, cbs: { [eventName: string]: (...args
 				realListeners.set(event, l);
 				emitter.once(event, l);
 			});
-		}).concat(new Promise<void>((resolve, reject) => {
+		}).concat(new Promise<void>((_resolve, reject) => {
 			signal?.throwIfAborted();
 			signal?.addEventListener("abort", () => {
 				reject(signal.reason);
@@ -27,4 +27,4 @@ function eventSwitch(emitter: EventEmitter, cbs: { [eventName: string]: (...args
 	});
 }
 
-export = eventSwitch
+export = eventSwitch;

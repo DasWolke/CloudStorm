@@ -1,6 +1,6 @@
 {
   "name": "cloudstorm",
-  "version": "0.19.0",
+  "version": "0.20.0",
   "description": "Minimalistic Discord Gateway library",
   "main": "./dist/index.js",
   "engines": {
@@ -22,6 +22,7 @@
     "build:docs": "typedoc --name CloudStorm --excludeExternals --sort static-first --sort alphabetical",
     "build": "npm run build:src && npm run build:docs",
     "lint": "eslint .",
+    "prepublishOnly": "npm run build:src",
     "test": "npm run build:src && node --test --test-timeout=30000 --test-force-exit \"test/**/*.test.js\"",
     "test:live": "npm run build:src && node --test --test-timeout=90000 --test-force-exit test/live.js"
   },
@@ -33,19 +34,28 @@
   "author": "wolke <wolke@weeb.sh>",
   "license": "MIT",
   "dependencies": {
-    "discord-api-types": "^0.38.49",
-    "snowtransfer": "^0.19.0"
+    "discord-api-types": "^0.38.58",
+    "snowtransfer": "^0.20.0"
+  },
+  "peerDependencies": {
+    "wetf": "^1.0.0"
+  },
+  "peerDependenciesMeta": {
+    "wetf": {
+      "optional": true
+    }
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
     "@types/node": "^26.1.0",
-    "@typescript-eslint/eslint-plugin": "^8.63.0",
-    "@typescript-eslint/parser": "^8.63.0",
-    "eslint": "^10.6.0",
-    "globals": "^17.7.0",
+    "@typescript-eslint/eslint-plugin": "^8.72.2",
+    "@typescript-eslint/parser": "^8.72.2",
+    "eslint": "^10.14.0",
+    "globals": "^17.14.0",
     "typedoc": "^0.28.20",
     "typedoc-plugin-mdn-links": "^5.1.1",
-    "typescript": "^6.0.3"
+    "typescript": "^6.0.3",
+    "wetf": "^1.0.0"
   },
   "files": [
     "dist",

@@ -1,7 +1,9 @@
 import { EventEmitter } from "node:events";
+
 import Constants = require("./Constants");
 import { SnowTransfer, Bucket, IntervalCounter } from "snowtransfer";
 import ShardManager = require("./ShardManager");
+import { getEtf } from "./etf";
 import type { APIGatewayBotInfo } from "discord-api-types/v10";
 
 import type {
@@ -35,18 +37,19 @@ class Client extends EventEmitter<ClientEvents> {
 		super();
 		if (!token) throw new Error("Missing token!");
 		const { snowtransferInstance, ws, ...rest } = options;
+		if (ws?.encoding === "etf") getEtf(); // throw now if wetf is missing instead of when the shards spawn
 		this._restClient = snowtransferInstance ?? new SnowTransfer(token);
 		this.token = token.startsWith("Bot ") ? token.substring(4) : token;
 		this.options = {
-			largeGuildThreshold: 250,
-			shards: "auto",
-			intents: 0,
 			...rest,
+			largeGuildThreshold: rest.largeGuildThreshold ?? 250,
+			shards: rest.shards ?? "auto",
+			intents: rest.intents ?? 0,
 			token,
 			ws: {
-				compress: true,
-				encoding: "json",
-				...ws
+				...ws,
+				compress: ws?.compress ?? true,
+				encoding: ws?.encoding ?? "json"
 			}
 		};
 		this.shardManager = new ShardManager(this);
@@ -54,6 +57,7 @@ class Client extends EventEmitter<ClientEvents> {
 
 	/**
 	 * Create one or more connections (depending on the selected amount of shards) to the Discord gateway.
+	 * Calling it again reconnects shards that were disconnected instead of spawning duplicates.
 	 * @since 0.1.4
 	 * @returns This function returns a promise which is solely used for awaiting the getGateway() method's return value.
 	 */
@@ -73,13 +77,15 @@ class Client extends EventEmitter<ClientEvents> {
 	public async fetchConnectInfo(): Promise<number> {
 		const gateway = await this.getGatewayBot();
 		this._updateEndpoint(gateway.url);
-		this.shardManager.identifyBucket.counters[0].applyCount(null, gateway.session_start_limit.remaining, gateway.session_start_limit.reset_after);
-		if (this.shardManager.identifyBucket.counters[0].canTake()) this.shardManager.identifyBucket.resume(); // canTake, not take: probing must not consume an identify slot
-		for (const route of Object.keys(this.shardManager.concurrencyBuckets)) {
-			delete this.shardManager.concurrencyBuckets[route];
+		const limits = gateway.session_start_limit;
+		this.shardManager.identifyBucket.counters[0].applyCount(limits.total, limits.remaining, limits.reset_after);
+		// Routes that still exist keep their bucket. A new one would forget the 5s window an identify may have just used
+		const buckets = this.shardManager.concurrencyBuckets;
+		for (const route of Object.keys(buckets)) {
+			if (Number(route) >= limits.max_concurrency) delete buckets[route];
 		}
-		for (let i = 0; i < gateway.session_start_limit.max_concurrency; i++) {
-			this.shardManager.concurrencyBuckets[i] = new Bucket([new IntervalCounter(1, 5000)]);
+		for (let i = 0; i < limits.max_concurrency; i++) {
+			buckets[i] ??= new Bucket([new IntervalCounter(1, 5000)]);
 		}
 		return gateway.shards;
 	}
@@ -266,7 +272,7 @@ class Client extends EventEmitter<ClientEvents> {
 	 * client.once("ready", () => {
 	 * 	// Client is connected to Discord and is ready, so we can send the request channel info payload.
 	 * 	// We will use shard 0 as the shard to send the payload.
-	 * 	client.requestChannelInfo(0, ["id"]);
+	 * 	client.requestChannelInfo(0, { guild_id: "id", fields: ["status"] });
 	 * });
 	 */
 	public async requestChannelInfo(shardId: number, data: Parameters<Client["shardManager"]["requestChannelInfo"]>["1"]): Promise<void> {

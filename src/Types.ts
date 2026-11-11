@@ -49,16 +49,23 @@ export type IShardResumeData = {
 	sessionId: string;
 	/** The last sequence number processed in the session. Discord replays everything after it on resume. */
 	seq: number;
-	/** The gateway address the session must be resumed at, as assigned by Discord in READY. */
+	/**
+	 * The gateway address the session must be resumed at, as assigned by Discord in READY.
+	 * The token gets sent there, so a seeded address is only used if it is on the gateway endpoint's host or a sibling under the same domain.
+	 * Anything else is ignored and the resume is attempted at the endpoint instead.
+	 */
 	resumeAddress: string | null;
 }
 
 export type IClientWSOptions = {
 	compress?: boolean;
+	/** "etf" requires the optional peer dependency wetf to be installed */
 	encoding?: "etf" | "json";
 	headers?: Record<string, any>;
 	bypassBuckets?: boolean;
 	connectThrottle?: number;
+	/** The most bytes a frame, a reassembled message or an inflated message may be before the connection is dropped. Defaults to 100MiB */
+	maxPayload?: number;
 }
 
 export type BWSEvents = {
@@ -73,6 +80,7 @@ export type BWSEvents = {
 
 export type ClientEvents = {
 	debug: [string];
+	/** What was sent to Discord. The token in identify and resume payloads is replaced with "[redacted]" */
 	rawSend: [GatewaySendPayload];
 	rawReceive: [GatewayReceivePayload];
 	error: [Error]; // no processing messages
@@ -80,6 +88,7 @@ export type ClientEvents = {
 	event: [IGatewayMessage];
 	dispatch: [IGatewayDispatch];
 	shardReady: [{ id: number; ready: boolean; }];
+	/** All shards are ready. Emits again every time a shard comes back from a reconnect, so use once() for one time setup */
 	ready: [];
 	disconnected: [];
 }
@@ -89,7 +98,6 @@ export type ConnectorEvents = {
 	ready: [boolean];
 	/** close code, close reason, gracefulClose (the close was deliberate, including internal reconnects), manual (the user requested this disconnect) */
 	disconnect: [number, string, boolean, boolean];
-	stateChange: ["connecting" | "identifying" | "resuming" | "ready" | "disconnected"]
 }
 
 export type ShardEvents = {

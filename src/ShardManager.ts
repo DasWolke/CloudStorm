@@ -2,6 +2,7 @@ import Shard = require("./Shard");
 import { Bucket, IntervalCounter } from "snowtransfer";
 
 import { IShardResumeData } from "./Types";
+import { clientError, safeEmit } from "./safeEmit";
 
 /**
  * Class used for managing shards for the user.
@@ -19,6 +20,8 @@ class ShardManager {
 	/** The buckets used to identify x number of shards within 5 second intervals. Larger bots benefit from this, but doesn't change how many times per day any shards can identify. */
 	public concurrencyBuckets: Record<string, Bucket> = {};
 
+	private readonly _clientError = (error: Error): void => clientError(this.client, error);
+
 	/**
 	 * Create a new ShardManager.
 	 */
@@ -33,11 +36,16 @@ class ShardManager {
 	public spawn(): void {
 		if (!Object.keys(this.concurrencyBuckets).length) throw new Error("Trying to spawn shards without calling Client.fetchConnectInfo()\nIf you intended to just let cloudstorm handle things for you, you should just use Client.connect() instead");
 		for (const id of (this.options.shards === "auto" ? Array.from({ length: this.options.totalShards ?? 1 }, (_, index) => index) : this.options.shards ?? [0])) {
-			this.client.emit("debug", `Spawned shard ${id}`);
+			if (this.shards[id]) {
+				// Spawned by an earlier connect. Replacing it would orphan a live shard and its session
+				this.shards[id].connect();
+				continue;
+			}
+			safeEmit(this._clientError, () => this.client.emit("debug", `Spawned shard ${id}`));
 			this.shards[id] = new Shard(id, this.client);
 			const resume = this.options.resumeData?.[id];
 			if (resume?.sessionId) {
-				this.client.emit("debug", `Shard ${id} was seeded with resume data and will try to resume session ${resume.sessionId}`);
+				safeEmit(this._clientError, () => this.client.emit("debug", `Shard ${id} was seeded with resume data and will try to resume session ${resume.sessionId}`));
 				this.shards[id].connector.seedResumeData(resume);
 			}
 			this._addListener(this.shards[id]);
@@ -51,9 +59,13 @@ class ShardManager {
 	 * @param resumable Whether to close with a code that keeps the sessions alive for a later resume. See DiscordConnector.disconnect.
 	 */
 	public disconnect(resumable = false): void {
-		for (const shard of Object.values(this.shards)) {
-			shard.disconnect(resumable);
+		const shards = Object.values(this.shards);
+		// Shards without a connection (never connected, or dead from a fatal close code) have nothing to close and never report back
+		const anyOpen = shards.some(shard => shard.connector.betterWs.sm.currentStateName !== "disconnected");
+		for (const shard of shards) {
+			shard.disconnect(resumable).catch(this._clientError);
 		}
+		if (!anyOpen) queueMicrotask(() => safeEmit(this._clientError, () => this.client.emit("disconnected")));
 	}
 
 	/**
@@ -77,29 +89,26 @@ class ShardManager {
 	private _addListener(shard: Shard): void {
 		shard.on("ready", (resume) => {
 			shard.ready = true;
-			this.client.emit("debug", `Shard ${shard.id} ${resume ? "has resumed" : "is ready"}`);
-			this.client.emit("shardReady", { id: shard.id, ready: !resume });
+			safeEmit(this._clientError, () => this.client.emit("debug", `Shard ${shard.id} ${resume ? "has resumed" : "is ready"}`));
+			safeEmit(this._clientError, () => this.client.emit("shardReady", { id: shard.id, ready: !resume }));
 			this._checkReady();
 		});
 		shard.on("queueIdentify", (shardId) => {
-			this.client.emit("debug", `Shard ${shardId} is ready to identify`);
+			safeEmit(this._clientError, () => this.client.emit("debug", `Shard ${shardId} is ready to identify`));
 			this.identifyBucket.enqueue(async () => {
 				const max_concurrency = Object.keys(this.concurrencyBuckets).length;
 				const concurrencyRoute = shardId % max_concurrency;
 				const bkt = this.concurrencyBuckets[concurrencyRoute];
 				if (!bkt) {
 					const error = new Error(`Received a queueIdentify event for shard ${shardId} and a concurrency route of ${concurrencyRoute} with a max_concurrency of ${max_concurrency}, but there was no bucket with that route internally.`);
-					if (this.client.listenerCount("error")) this.client.emit("error", error);
-					else this.client.emit("debug", error.message);
+					this._clientError(error);
 					return;
 				}
-				bkt.enqueue(async () => {
-					shard.connector.identify();
-				});
-			});
+				bkt.enqueue(async () => shard.connector.identify()).catch(this._clientError);
+			}).catch(this._clientError);
 		});
-		shard.on("disconnect", (code, reason, gracefulClose, manual) => {
-			this.client.emit("debug", `Websocket of shard ${shard.id} closed with code ${code} and reason: ${reason ?? "None"}`);
+		shard.on("disconnect", (code, reason, _gracefulClose, manual) => {
+			safeEmit(this._clientError, () => this.client.emit("debug", `Websocket of shard ${shard.id} closed with code ${code} and reason: ${reason ?? "None"}`));
 			// Only user-requested disconnects count towards the "disconnected" event. gracefulClose alone
 			// also covers internal reconnects, which pass through disconnected for only a moment.
 			if (manual) return this._checkDisconnect();
@@ -111,7 +120,7 @@ class ShardManager {
 	 * @since 0.1.4
 	 */
 	private _checkReady(): void {
-		if (Object.values(this.shards).every(shard => shard.ready)) this.client.emit("ready");
+		if (Object.values(this.shards).every(shard => shard.ready)) safeEmit(this._clientError, () => this.client.emit("ready"));
 	}
 
 	/**
@@ -119,7 +128,7 @@ class ShardManager {
 	 * @since 0.1.4
 	 */
 	private _checkDisconnect(): void {
-		if (Object.values(this.shards).every(shard => shard.connector.status === "disconnected")) this.client.emit("disconnected");
+		if (Object.values(this.shards).every(shard => shard.connector.status === "disconnected")) safeEmit(this._clientError, () => this.client.emit("disconnected"));
 	}
 
 	/**

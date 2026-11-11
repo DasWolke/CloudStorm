@@ -4,7 +4,7 @@
 
 // A minimal in-process Discord-gateway stand-in: a real HTTP server performing real WebSocket
 // upgrades and speaking raw frames over the socket, scripted per test. Client-to-server frames
-// arrive masked (CloudStorm always masks with a zero key); server-to-client frames are unmasked.
+// arrive masked with a random key; server-to-client frames are unmasked.
 //
 // Note: scenario scripts usually write HELLO within the same tick window as the 101 response,
 // so both coalesce into one TCP segment. That is deliberate - it exercises the client's handling
